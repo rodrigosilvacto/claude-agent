@@ -1,0 +1,144 @@
+name: Revisão automática de artigos (CTO/CIO)
+
+# Dispara sempre que um artigo é enviado (push) em qualquer branch != main.
+# Revisa o(s) artigo(s) alterado(s) com a API da Claude, adotando a ótica de
+# um CTO/CIO (texto, escrita, ortografia e formatação). Se aprovado, abre a
+# Pull Request automaticamente; se não, falha o job com o feedback detalhado
+# e nenhuma PR é criada.
+#
+# Requer o secret ANTHROPIC_API_KEY configurado em
+# Settings > Secrets and variables > Actions deste repositório.
+
+on:
+  push:
+    branches-ignore:
+      - main
+    paths:
+      - 'posts/**.md'
+      - '*.md'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  review-and-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detectar artigos alterados em relação à main
+        id: changed
+        run: |
+          git fetch origin main --depth=1
+          FILES=$(git diff --name-only origin/main...HEAD -- 'posts/*.md' '*.md' | grep -v '^README\.md$' || true)
+          {
+            echo "files<<EOF_FILES"
+            echo "$FILES"
+            echo "EOF_FILES"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Revisar artigos com Claude (ótica de CTO/CIO)
+        if: steps.changed.outputs.files != ''
+        id: review
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          set -euo pipefail
+          overall_approved=true
+          : > /tmp/feedback.md
+
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            [ -f "$file" ] || continue
+
+            payload_file="$(mktemp)"
+            jq -n --rawfile content "$file" --arg file "$file" '{
+              model: "claude-opus-4-8",
+              max_tokens: 4096,
+              system: "Você é um revisor editorial sênior avaliando um artigo/post de blog técnico como se fosse um CTO ou CIO: leitor executivo, tecnicamente competente, com pouco tempo e baixa tolerância para exagero, jargão vazio ou imprecisão técnica. Revise texto/escrita, ortografia e gramática, formatação markdown (sem artefatos, sem links quebrados/placeholder, sem duplicação) e rigor factual/de negócio. Responda estritamente no formato JSON solicitado.",
+              messages: [{role: "user", content: ("Revise o artigo abaixo (arquivo: " + $file + ") e retorne o veredito.\n\n---\n\n" + $content)}],
+              output_config: {
+                format: {
+                  type: "json_schema",
+                  schema: {
+                    type: "object",
+                    properties: {
+                      approved: {type: "boolean"},
+                      blocking_issues: {type: "array", items: {type: "string"}},
+                      feedback: {type: "string"}
+                    },
+                    required: ["approved", "blocking_issues", "feedback"],
+                    additionalProperties: false
+                  }
+                }
+              }
+            }' > "$payload_file"
+
+            response="$(curl -sS https://api.anthropic.com/v1/messages \
+              -H "content-type: application/json" \
+              -H "x-api-key: $ANTHROPIC_API_KEY" \
+              -H "anthropic-version: 2023-06-01" \
+              -d @"$payload_file")"
+
+            text="$(echo "$response" | jq -r '.content[0].text // empty')"
+
+            if [ -z "$text" ]; then
+              echo "::error file=$file::Falha ao chamar a API da Claude: $(echo "$response" | jq -c '.error // .')"
+              overall_approved=false
+              {
+                echo ""
+                echo "### $file"
+                echo ""
+                echo "Falha ao revisar este arquivo (erro de API)."
+              } >> /tmp/feedback.md
+              continue
+            fi
+
+            approved="$(echo "$text" | jq -r '.approved')"
+            fb="$(echo "$text" | jq -r '.feedback')"
+
+            {
+              echo ""
+              echo "### $file"
+              echo ""
+              if [ "$approved" = "true" ]; then
+                echo "**Veredito:** APROVADO"
+              else
+                echo "**Veredito:** MUDANÇAS_NECESSÁRIAS"
+              fi
+              echo ""
+              echo "$fb"
+            } >> /tmp/feedback.md
+
+            if [ "$approved" != "true" ]; then
+              overall_approved=false
+            fi
+          done <<< "${{ steps.changed.outputs.files }}"
+
+          echo "approved=$overall_approved" >> "$GITHUB_OUTPUT"
+
+      - name: Criar PR automaticamente (artigos aprovados)
+        if: steps.changed.outputs.files != '' && steps.review.outputs.approved == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh pr view "${{ github.ref_name }}" >/dev/null 2>&1; then
+            echo "PR já existe para esta branch — nada a fazer."
+          else
+            gh pr create \
+              --base main \
+              --head "${{ github.ref_name }}" \
+              --title "Novo artigo revisado (CTO/CIO): ${{ github.ref_name }}" \
+              --body-file /tmp/feedback.md
+          fi
+
+      - name: Reportar mudanças necessárias (artigo reprovado)
+        if: steps.changed.outputs.files != '' && steps.review.outputs.approved != 'true'
+        run: |
+          echo "::error::Um ou mais artigos foram reprovados pelo revisor CTO/CIO. Nenhuma PR foi aberta automaticamente."
+          cat /tmp/feedback.md
+          exit 1
