@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cadastro de Emails</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+    }
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f5f5f7;
+      padding: 1.5rem;
+    }
+    @media (prefers-color-scheme: dark) {
+      body { background: #16161a; }
+    }
+    .card {
+      width: 100%;
+      max-width: 420px;
+      background: #ffffff;
+      border-radius: 16px;
+      padding: 2rem;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+    }
+    @media (prefers-color-scheme: dark) {
+      .card { background: #232329; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4); }
+    }
+    h1 {
+      font-size: 1.4rem;
+      margin: 0 0 1.5rem;
+      color: #1d1d1f;
+    }
+    @media (prefers-color-scheme: dark) {
+      h1 { color: #f2f2f2; }
+    }
+    label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-bottom: 0.4rem;
+      color: #444;
+    }
+    @media (prefers-color-scheme: dark) {
+      label { color: #ccc; }
+    }
+    input {
+      width: 100%;
+      padding: 0.7rem 0.9rem;
+      margin-bottom: 1.1rem;
+      border: 1px solid #d2d2d7;
+      border-radius: 8px;
+      font-size: 1rem;
+      background: #fff;
+      color: #1d1d1f;
+    }
+    @media (prefers-color-scheme: dark) {
+      input {
+        background: #17171c;
+        border-color: #3a3a40;
+        color: #f2f2f2;
+      }
+    }
+    input:focus {
+      outline: none;
+      border-color: #0071e3;
+    }
+    button {
+      width: 100%;
+      padding: 0.8rem;
+      border: none;
+      border-radius: 8px;
+      background: #0071e3;
+      color: #fff;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    #message {
+      margin-top: 1rem;
+      font-size: 0.9rem;
+      text-align: center;
+      min-height: 1.2em;
+    }
+    #message.success { color: #1a8a3f; }
+    #message.error { color: #d92d20; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Cadastro de Emails</h1>
+    <form id="registration-form">
+      <label for="name">Nome</label>
+      <input type="text" id="name" name="name" required autocomplete="name" />
+
+      <label for="email">Email</label>
+      <input type="email" id="email" name="email" required autocomplete="email" />
+
+      <label for="phone">Telefone</label>
+      <input type="tel" id="phone" name="phone" required autocomplete="tel" placeholder="(11) 91234-5678" />
+
+      <button type="submit" id="submit-btn">Cadastrar</button>
+    </form>
+    <div id="message"></div>
+  </div>
+
+  <script type="module">
+    import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+    const SUPABASE_URL = "https://xtrvojnauvkkterogrst.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_JmhdMN8S7lSpCeaJANw_lQ_RRwZ2_OT";
+
+    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    const form = document.getElementById("registration-form");
+    const messageEl = document.getElementById("message");
+    const submitBtn = document.getElementById("submit-btn");
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      submitBtn.disabled = true;
+      messageEl.textContent = "";
+      messageEl.className = "";
+
+      const name = document.getElementById("name").value.trim();
+      const email = document.getElementById("email").value.trim();
+      const phone = document.getElementById("phone").value.trim();
+
+      const { error } = await supabase
+        .from("email_registrations")
+        .insert([{ name, email, phone }]);
+
+      if (error) {
+        messageEl.textContent = "Erro ao cadastrar: " + error.message;
+        messageEl.className = "error";
+      } else {
+        messageEl.textContent = "Cadastro realizado com sucesso!";
+        messageEl.className = "success";
+        form.reset();
+      }
+
+      submitBtn.disabled = false;
+    });
+  </script>
+</body>
+</html>
