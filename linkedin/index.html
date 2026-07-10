@@ -148,10 +148,114 @@
     @media (prefers-color-scheme: dark) {
       #grade-justificativa { color: #ccc; }
     }
+
+    /* Animação do pipeline: agente escritor -> agente avaliador -> concluído */
+    #pipeline {
+      display: none;
+      margin-bottom: 1.6rem;
+    }
+    #pipeline .pipeline-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #pipeline .pipeline-step {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.35rem;
+      width: 92px;
+      opacity: 0.4;
+      transition: opacity 0.25s;
+    }
+    #pipeline .pipeline-step.active,
+    #pipeline .pipeline-step.done {
+      opacity: 1;
+    }
+    #pipeline .pipeline-icon {
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.3rem;
+      background: #eceef1;
+      border: 2px solid #d2d2d7;
+      transition: background 0.25s, border-color 0.25s, transform 0.2s;
+    }
+    @media (prefers-color-scheme: dark) {
+      #pipeline .pipeline-icon { background: #1c1c22; border-color: #3a3a40; }
+    }
+    #pipeline .pipeline-step.active .pipeline-icon {
+      border-color: #0071e3;
+      box-shadow: 0 0 0 4px rgba(0, 113, 227, 0.15);
+      animation: pipeline-pulse 1.1s ease-in-out infinite;
+    }
+    #pipeline .pipeline-step.done .pipeline-icon {
+      background: #0071e3;
+      border-color: #0071e3;
+    }
+    #pipeline .pipeline-label {
+      font-size: 0.72rem;
+      text-align: center;
+      line-height: 1.2;
+      color: #444;
+      min-height: 1.9em;
+    }
+    @media (prefers-color-scheme: dark) {
+      #pipeline .pipeline-label { color: #ccc; }
+    }
+    #pipeline .pipeline-line {
+      flex: 0 0 40px;
+      height: 2px;
+      margin-top: -22px;
+      background: #d2d2d7;
+      position: relative;
+      overflow: hidden;
+    }
+    @media (prefers-color-scheme: dark) {
+      #pipeline .pipeline-line { background: #3a3a40; }
+    }
+    #pipeline .pipeline-line::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: #0071e3;
+      transform: scaleX(0);
+      transform-origin: left;
+      transition: transform 0.4s ease;
+    }
+    #pipeline .pipeline-line.filled::after {
+      transform: scaleX(1);
+    }
+    @keyframes pipeline-pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.12); }
+    }
   </style>
 </head>
 <body>
   <div class="card">
+    <div id="pipeline">
+      <div class="pipeline-row">
+        <div class="pipeline-step" id="pipeline-write">
+          <div class="pipeline-icon">✍️</div>
+          <div class="pipeline-label">Agente escritor gerando o post</div>
+        </div>
+        <div class="pipeline-line" id="pipeline-line-1"></div>
+        <div class="pipeline-step" id="pipeline-grade">
+          <div class="pipeline-icon">🔎</div>
+          <div class="pipeline-label">Agente escritor chama o agente avaliador</div>
+        </div>
+        <div class="pipeline-line" id="pipeline-line-2"></div>
+        <div class="pipeline-step" id="pipeline-done">
+          <div class="pipeline-icon">✅</div>
+          <div class="pipeline-label">Concluído</div>
+        </div>
+      </div>
+    </div>
+
     <h1>Gerador de Post para LinkedIn</h1>
     <p class="subtitle">Descreva um tema e receba um texto pronto para publicar.</p>
 
@@ -202,6 +306,55 @@
     const gradeLabelEl = document.getElementById("grade-label");
     const gradeJustificativaEl = document.getElementById("grade-justificativa");
 
+    const pipelineEl = document.getElementById("pipeline");
+    const pipelineSteps = {
+      write: document.getElementById("pipeline-write"),
+      grade: document.getElementById("pipeline-grade"),
+      done: document.getElementById("pipeline-done"),
+    };
+    const pipelineLines = [
+      document.getElementById("pipeline-line-1"),
+      document.getElementById("pipeline-line-2"),
+    ];
+    let pipelineTimer = null;
+
+    function setPipelineStage(stage) {
+      Object.values(pipelineSteps).forEach((el) => el.classList.remove("active", "done"));
+      pipelineLines.forEach((el) => el.classList.remove("filled"));
+
+      if (stage === "write") {
+        pipelineSteps.write.classList.add("active");
+      } else if (stage === "grade") {
+        pipelineSteps.write.classList.add("done");
+        pipelineLines[0].classList.add("filled");
+        pipelineSteps.grade.classList.add("active");
+      } else if (stage === "done") {
+        pipelineSteps.write.classList.add("done");
+        pipelineSteps.grade.classList.add("done");
+        pipelineSteps.done.classList.add("done");
+        pipelineLines[0].classList.add("filled");
+        pipelineLines[1].classList.add("filled");
+      }
+    }
+
+    function startPipeline() {
+      pipelineEl.style.display = "block";
+      setPipelineStage("write");
+      // Agente 1 (escritor) está trabalhando; depois de um tempo, simula a
+      // chamada ao agente 2 (avaliador) — a troca real acontece no backend,
+      // então isso é uma representação visual do que já está ocorrendo lá.
+      pipelineTimer = setTimeout(() => setPipelineStage("grade"), 1400);
+    }
+
+    function finishPipeline(success) {
+      clearTimeout(pipelineTimer);
+      if (success) {
+        setPipelineStage("done");
+      } else {
+        pipelineEl.style.display = "none";
+      }
+    }
+
     const GRADE_LABELS = {
       executivo: "Texto executivo bem formatado",
       tecnico: "Texto técnico bem formatado",
@@ -236,6 +389,7 @@
       messageEl.className = "";
       resultWrapper.style.display = "none";
       gradeWrapper.style.display = "none";
+      startPipeline();
 
       const theme = document.getElementById("theme").value.trim();
       const tone = document.getElementById("tone").value;
@@ -247,10 +401,12 @@
       if (error || !data?.post) {
         messageEl.textContent = data?.error || error?.message || "Erro ao gerar o post.";
         messageEl.className = "error";
+        finishPipeline(false);
       } else {
         resultEl.value = data.post;
         resultWrapper.style.display = "block";
         renderGrade(data.grade);
+        finishPipeline(true);
       }
 
       submitBtn.disabled = false;
