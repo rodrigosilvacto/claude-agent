@@ -35,3 +35,14 @@ desabilitado**, ver abaixo.
    com status de erro até ser reprocessado.
 4. Magic link (Email OTP) no Supabase Auth pode continuar habilitado sem
    problema — o painel simplesmente não exige mais uma sessão para funcionar.
+
+### Hospedagem (GitHub Pages) e cache
+
+O painel é servido via GitHub Pages a partir deste repositório. `styles.css`,
+`app.js` e `supabaseClient.js` são referenciados com `?v=N` (ex:
+`./assets/app.js?v=3`) para forçar o navegador a buscar a versão nova depois
+de cada deploy — sem isso, o CDN do GitHub Pages e o cache do navegador podem
+continuar servindo a versão antiga por vários minutos mesmo depois do merge.
+**Sempre que alterar `styles.css`, `app.js` ou `supabaseClient.js`, incremente
+esse número em todos os arquivos que os referenciam** (`index.html`,
+`login.html`, `share.html`, e o `import` dentro do próprio `app.js`).
