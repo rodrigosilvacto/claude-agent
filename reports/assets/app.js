@@ -3,12 +3,10 @@ import { supabase } from "./supabaseClient.js";
 const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
 const ALLOWED_EXTENSIONS = ["pdf", "docx", "md", "txt"];
 
-let currentUser = null;
+const ANONYMOUS_AUTHOR = "Anônimo (login desabilitado)";
 let allReports = [];
 
 const els = {
-  userEmail: document.getElementById("user-email"),
-  logoutBtn: document.getElementById("logout-btn"),
   statTotal: document.getElementById("stat-total"),
   themeChart: document.getElementById("theme-chart"),
   freqChart: document.getElementById("freq-chart"),
@@ -42,23 +40,8 @@ function formatDate(iso) {
   return new Date(iso).toLocaleDateString("pt-BR", { year: "numeric", month: "short", day: "numeric" });
 }
 
-// ---- Auth guard ----
-const { data: { session } } = await supabase.auth.getSession();
-if (!session) {
-  window.location.replace("./login.html");
-} else {
-  currentUser = session.user;
-  els.userEmail.textContent = currentUser.email;
-}
-
-supabase.auth.onAuthStateChange((_event, newSession) => {
-  if (!newSession) window.location.replace("./login.html");
-});
-
-els.logoutBtn.addEventListener("click", async () => {
-  await supabase.auth.signOut();
-  window.location.replace("./login.html");
-});
+// Login está temporariamente desabilitado (ver migration 0003): o painel
+// roda aberto, sem sessão, então não há guarda de autenticação aqui.
 
 // ---- Data loading ----
 async function loadReports() {
@@ -180,7 +163,6 @@ function renderGrid(reports) {
   }
 
   els.grid.innerHTML = reports.map((r) => {
-    const isOwner = r.author_id === currentUser.id;
     const tagsHtml = (r.tags || []).map((t) => `<span class="tag">${escapeHtml(t)}</span>`).join("");
     const statusClass = r.summary_status === "error" ? "error" : r.summary_status === "pending" ? "pending" : "";
     return `
@@ -196,7 +178,7 @@ function renderGrid(reports) {
         <div class="card-actions">
           <button class="secondary small" data-action="share">${r.share_enabled ? "🔗 Copiar link" : "Compartilhar"}</button>
           <button class="secondary small" data-action="reprocess">↻ Reprocessar</button>
-          ${isOwner ? `<button class="danger small" data-action="delete">Excluir</button>` : ""}
+          <button class="danger small" data-action="delete">Excluir</button>
         </div>
       </div>
     `;
@@ -324,7 +306,7 @@ els.uploadForm.addEventListener("submit", async (event) => {
 
     const reportId = crypto.randomUUID();
     const safeFileName = file.name.replace(/[^\w.\-]/g, "_");
-    const filePath = `${currentUser.id}/${reportId}/${safeFileName}`;
+    const filePath = `anonymous/${reportId}/${safeFileName}`;
 
     els.uploadMessage.textContent = "Enviando arquivo...";
 
@@ -336,8 +318,7 @@ els.uploadForm.addEventListener("submit", async (event) => {
     const { error: insertError } = await supabase.from("reports").insert({
       id: reportId,
       title,
-      author_id: currentUser.id,
-      author_email: currentUser.email,
+      author_email: ANONYMOUS_AUTHOR,
       file_path: filePath,
       file_name: file.name,
       file_type: ext,

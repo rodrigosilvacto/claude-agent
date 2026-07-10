@@ -1,10 +1,10 @@
 // Generates (or regenerates) a 3-5 line AI summary for an uploaded report.
-// Requires the caller to be an authenticated user; the report itself is
+// Login is temporarily disabled for the panel (see migration 0003), so this
+// function does not require an authenticated session — the report itself is
 // fetched/updated with the service role so RLS never blocks this path.
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
 const ANTHROPIC_MODEL = "claude-opus-4-8";
@@ -40,15 +40,6 @@ Deno.serve(async (req: Request) => {
   }
   if (!reportId) {
     return json({ error: "reportId é obrigatório." }, 400);
-  }
-
-  const authHeader = req.headers.get("Authorization") ?? "";
-  const userClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    global: { headers: { Authorization: authHeader } },
-  });
-  const { data: userData, error: userError } = await userClient.auth.getUser();
-  if (userError || !userData?.user) {
-    return json({ error: "Não autenticado." }, 401);
   }
 
   const serviceClient = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
