@@ -10,7 +10,7 @@ const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
 const ANTHROPIC_MODEL = "claude-opus-4-8";
 
 const PROMPT =
-  "Resuma o conteúdo deste documento em 3 a 5 linhas, em português, destacando o tema principal, as principais conclusões e para quem o material é relevante. Responda apenas com o resumo, sem introduções nem comentários adicionais.";
+  "Resuma o conteúdo deste documento em 3 a 5 linhas, em português, destacando o tema principal, as principais conclusões e para quem o material é relevante. Se o conteúdo for um dashboard ou relatório em HTML, baseie o resumo nos dados, métricas e gráficos que ele apresenta. Responda apenas com o resumo, sem introduções nem comentários adicionais.";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -98,6 +98,9 @@ async function summarizeFile(blob: Blob, fileName: string): Promise<string> {
   } else if (ext === "docx") {
     const text = truncate(await extractDocxText(blob));
     userContent.push({ type: "text", text: `${PROMPT}\n\n---\n${text}` });
+  } else if (ext === "html" || ext === "htm") {
+    const text = truncate(extractHtmlText(await blob.text()));
+    userContent.push({ type: "text", text: `${PROMPT}\n\n---\n${text}` });
   } else {
     const text = truncate(await blob.text());
     userContent.push({ type: "text", text: `${PROMPT}\n\n---\n${text}` });
@@ -140,6 +143,15 @@ function encodeBase64(bytes: Uint8Array): string {
     binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
   }
   return btoa(binary);
+}
+
+function extractHtmlText(html: string): string {
+  return html
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<[^>]+>/g, "\n")
+    .replace(/\n{2,}/g, "\n")
+    .trim();
 }
 
 async function extractDocxText(blob: Blob): Promise<string> {
