@@ -60,3 +60,10 @@ continuar servindo a versão antiga por vários minutos mesmo depois do merge.
 **Sempre que alterar `styles.css`, `app.js` ou `supabaseClient.js`, incremente
 esse número em todos os arquivos que os referenciam** (`index.html`,
 `login.html`, `share.html`, e o `import` dentro do próprio `app.js`).
+
+O topo do painel (`reports/index.html`) também mostra dois horários de
+"deploy": um fixo no HTML (`index.html`) e outro escrito via JS
+(`APP_JS_BUILD`, em `assets/app.js`). Servem para diagnosticar cache: se o
+que aparece na tela estiver desatualizado em relação ao último commit, é
+cache do CDN/navegador, não bug de código. **Sempre que alterar `index.html`
+ou `app.js`, atualize esses dois timestamps também** (mesma lógica do `?v=N`).
