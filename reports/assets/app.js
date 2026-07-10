@@ -1,4 +1,10 @@
-import { supabase } from "./supabaseClient.js?v=8";
+import { supabase } from "./supabaseClient.js?v=9";
+
+// Bump this string on every change to app.js — it's how the topbar shows
+// whether the browser/CDN is actually serving the latest deployed script.
+const APP_JS_BUILD = "2026-07-10 01:06 UTC";
+const appBuildEl = document.getElementById("app-build");
+if (appBuildEl) appBuildEl.textContent = APP_JS_BUILD;
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
 const ALLOWED_EXTENSIONS = ["html", "htm"];
