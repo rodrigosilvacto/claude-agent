@@ -1,8 +1,8 @@
-import { supabase } from "./supabaseClient.js?v=9";
+import { supabase } from "./supabaseClient.js?v=10";
 
 // Bump this string on every change to app.js — it's how the topbar shows
 // whether the browser/CDN is actually serving the latest deployed script.
-const APP_JS_BUILD = "2026-07-10 01:06 UTC";
+const APP_JS_BUILD = "2026-07-10 01:55 UTC";
 const appBuildEl = document.getElementById("app-build");
 if (appBuildEl) appBuildEl.textContent = APP_JS_BUILD;
 
@@ -325,9 +325,16 @@ els.uploadForm.addEventListener("submit", async (event) => {
 
     els.uploadMessage.textContent = "Enviando arquivo...";
 
+    // supabase-js wraps File/Blob bodies in FormData and lets the browser set
+    // that part's Content-Type from the Blob's own .type — the `contentType`
+    // upload option is ignored in that path. So force the correct type onto a
+    // fresh Blob instead of trusting the option (or the original File's type,
+    // which browsers sometimes report empty/wrong for local files).
+    const typedBlob = new Blob([await file.arrayBuffer()], { type: MIME_TYPES[ext] });
+
     const { error: uploadError } = await supabase.storage
       .from("reports")
-      .upload(filePath, file, { contentType: MIME_TYPES[ext], upsert: false });
+      .upload(filePath, typedBlob, { contentType: MIME_TYPES[ext], upsert: false });
     if (uploadError) throw uploadError;
 
     const { error: insertError } = await supabase.from("reports").insert({
