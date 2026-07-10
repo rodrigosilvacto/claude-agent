@@ -1,8 +1,8 @@
-import { supabase } from "./supabaseClient.js?v=10";
+import { supabase } from "./supabaseClient.js?v=11";
 
 // Bump this string on every change to app.js — it's how the topbar shows
 // whether the browser/CDN is actually serving the latest deployed script.
-const APP_JS_BUILD = "2026-07-10 01:55 UTC";
+const APP_JS_BUILD = "2026-07-10 02:05 UTC";
 const appBuildEl = document.getElementById("app-build");
 if (appBuildEl) appBuildEl.textContent = APP_JS_BUILD;
 
@@ -41,6 +41,7 @@ const els = {
   viewModal: document.getElementById("view-modal"),
   viewFrame: document.getElementById("view-frame"),
   viewTitle: document.getElementById("view-title"),
+  viewNewTab: document.getElementById("view-new-tab"),
   closeView: document.getElementById("close-view"),
 };
 
@@ -227,6 +228,7 @@ async function handleView(report, btn) {
     if (error || !data?.signedUrl) throw error || new Error("Não foi possível gerar o link do arquivo.");
     els.viewTitle.textContent = report.title;
     els.viewFrame.src = data.signedUrl;
+    els.viewNewTab.href = data.signedUrl;
     els.viewModal.style.display = "flex";
   } catch (err) {
     alert("Erro ao abrir arquivo: " + err.message);

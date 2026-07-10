@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Painel de Reports</title>
-  <link rel="stylesheet" href="./assets/styles.css?v=10" />
+  <link rel="stylesheet" href="./assets/styles.css?v=11" />
 </head>
 <body>
   <div class="page">
@@ -12,7 +12,7 @@
       <div>
         <h1>📋 Painel de Reports</h1>
         <p class="hint" style="margin: 0.2rem 0 0;">
-          index.html: <strong>2026-07-10 01:55 UTC</strong> ·
+          index.html: <strong>2026-07-10 02:05 UTC</strong> ·
           app.js: <strong id="app-build">(não carregou)</strong>
           — se as datas não baterem com o último push, o navegador está com cache antigo.
         </p>
@@ -86,14 +86,17 @@
 
   <div class="modal-backdrop" id="view-modal" style="display:none;">
     <div class="modal" style="max-width: 96vw; width: 96vw; height: 92vh; display: flex; flex-direction: column;">
-      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom: 0.6rem;">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom: 0.6rem; gap: 0.5rem;">
         <h2 id="view-title" style="margin:0; font-size:1rem;"></h2>
-        <button class="secondary small" id="close-view">Fechar</button>
+        <div style="display:flex; gap:0.5rem;">
+          <a id="view-new-tab" href="#" target="_blank" rel="noopener noreferrer" class="btn secondary small">Abrir em nova aba</a>
+          <button class="secondary small" id="close-view">Fechar</button>
+        </div>
       </div>
       <iframe id="view-frame" title="Visualização do report" sandbox="allow-scripts allow-same-origin allow-popups" style="flex:1; width:100%; border:1px solid var(--border); border-radius: 10px; background:#fff;"></iframe>
     </div>
   </div>
 
-  <script type="module" src="./assets/app.js?v=10"></script>
+  <script type="module" src="./assets/app.js?v=11"></script>
 </body>
 </html>

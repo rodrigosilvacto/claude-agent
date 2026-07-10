@@ -80,24 +80,26 @@ button, .btn {
   color: var(--accent-ink);
   font-weight: 600;
   transition: opacity 0.15s;
+  display: inline-block;
+  text-decoration: none;
 }
 
 button:hover, .btn:hover { opacity: 0.88; }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
 
-button.secondary {
+button.secondary, .btn.secondary {
   background: transparent;
   color: var(--ink);
   border: 1px solid var(--border);
 }
 
-button.danger {
+button.danger, .btn.danger {
   background: transparent;
   color: var(--danger);
   border: 1px solid var(--danger);
 }
 
-button.small {
+button.small, .btn.small {
   padding: 0.35rem 0.7rem;
   font-size: 0.8rem;
   font-weight: 500;
