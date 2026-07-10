@@ -2,11 +2,16 @@
 
 ## Painel de Reports (`/reports`)
 
-Painel interno para centralizar reports (PDF/DOCX/MD/TXT/HTML, incluindo
-dashboards gerados pelo Claude): upload com tema/tags, busca/filtro,
-compartilhamento por link e dashboard de indicadores. Stack: HTML/JS
-estático + Supabase (Auth, Postgres, Storage, Edge Functions), mesmo padrão
-do `index.html` na raiz.
+Painel interno para centralizar dashboards em HTML gerados pelo Claude:
+upload com tema/tags, visualização renderizada (o HTML/JS é executado em
+tela, não só linkado), busca/filtro, compartilhamento por link e dashboard
+de indicadores. Stack: HTML/JS estático + Supabase (Auth, Postgres,
+Storage, Edge Functions), mesmo padrão do `index.html` na raiz.
+
+> **Só HTML (`.html`/`.htm`):** o upload aceita exclusivamente arquivos
+> HTML — PDF/DOCX/MD/TXT foram removidos do escopo. O caso de uso é anexar
+> dashboards que o Claude gera, então "visualizar" precisa executar o
+> arquivo na tela (iframe), o que só faz sentido para HTML.
 
 > **Sem resumo automático (removido):** a geração de resumo via Claude foi
 > removida do MVP por depender de deploy de edge function + secret da
@@ -36,7 +41,12 @@ desabilitado**, ver abaixo.
    - `supabase/migrations/0003_disable_auth_requirement.sql` (abre o acesso
      para o anon key — só aplicar se realmente quiser o painel sem login)
 2. Deploy da Edge Function `supabase/functions/share-report` (usada pelo
-   link de compartilhamento).
+   link de compartilhamento). **No projeto atual ela está deployada sob o
+   slug `rapid-worker`** (o slug é fixado na criação e não pode ser
+   renomeado depois) — por isso `reports/share.html` chama
+   `supabase.functions.invoke("rapid-worker", ...)` em vez de
+   `"share-report"`. Se você recriar essa function do zero com o nome
+   correto, atualize a constante `SHARE_FUNCTION_NAME` em `share.html`.
 3. Magic link (Email OTP) no Supabase Auth pode continuar habilitado sem
    problema — o painel simplesmente não exige mais uma sessão para funcionar.
 
