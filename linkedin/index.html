@@ -122,6 +122,32 @@
       resize: vertical;
       line-height: 1.45;
     }
+    #grade-wrapper {
+      display: none;
+      margin-top: 1.2rem;
+      padding: 0.9rem 1rem;
+      border-radius: 10px;
+      border: 1px solid #d2d2d7;
+    }
+    @media (prefers-color-scheme: dark) {
+      #grade-wrapper { border-color: #3a3a40; }
+    }
+    #grade-wrapper.grade-good { border-color: #1a8a3f; background: rgba(26, 138, 63, 0.08); }
+    #grade-wrapper.grade-bad { border-color: #d92d20; background: rgba(217, 45, 32, 0.08); }
+    #grade-wrapper.grade-warn { border-color: #b96a00; background: rgba(185, 106, 0, 0.08); }
+    #grade-label {
+      font-weight: 700;
+      font-size: 0.95rem;
+      margin-bottom: 0.3rem;
+    }
+    #grade-justificativa {
+      margin: 0;
+      font-size: 0.85rem;
+      color: #444;
+    }
+    @media (prefers-color-scheme: dark) {
+      #grade-justificativa { color: #ccc; }
+    }
   </style>
 </head>
 <body>
@@ -150,6 +176,11 @@
       <label for="result">Resultado</label>
       <textarea id="result" readonly></textarea>
       <button type="button" class="secondary" id="copy-btn">Copiar texto</button>
+
+      <div id="grade-wrapper">
+        <div id="grade-label"></div>
+        <p id="grade-justificativa"></p>
+      </div>
     </div>
   </div>
 
@@ -167,6 +198,35 @@
     const resultWrapper = document.getElementById("result-wrapper");
     const resultEl = document.getElementById("result");
     const copyBtn = document.getElementById("copy-btn");
+    const gradeWrapper = document.getElementById("grade-wrapper");
+    const gradeLabelEl = document.getElementById("grade-label");
+    const gradeJustificativaEl = document.getElementById("grade-justificativa");
+
+    const GRADE_LABELS = {
+      executivo: "Texto executivo bem formatado",
+      tecnico: "Texto técnico bem formatado",
+      pessimo: "Texto péssimo",
+      reescrever: "Reescrever",
+    };
+    const GRADE_STYLES = {
+      executivo: "grade-good",
+      tecnico: "grade-good",
+      pessimo: "grade-bad",
+      reescrever: "grade-warn",
+    };
+
+    function renderGrade(grade) {
+      gradeWrapper.className = "";
+      if (!grade || !grade.categoria) {
+        gradeWrapper.style.display = "none";
+        return;
+      }
+      const label = GRADE_LABELS[grade.categoria] || grade.categoria;
+      gradeLabelEl.textContent = grade.nota ? `${label} — nota ${grade.nota}/10` : label;
+      gradeJustificativaEl.textContent = grade.justificativa || "";
+      gradeWrapper.classList.add(GRADE_STYLES[grade.categoria] || "");
+      gradeWrapper.style.display = "block";
+    }
 
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -175,6 +235,7 @@
       messageEl.textContent = "";
       messageEl.className = "";
       resultWrapper.style.display = "none";
+      gradeWrapper.style.display = "none";
 
       const theme = document.getElementById("theme").value.trim();
       const tone = document.getElementById("tone").value;
@@ -189,6 +250,7 @@
       } else {
         resultEl.value = data.post;
         resultWrapper.style.display = "block";
+        renderGrade(data.grade);
       }
 
       submitBtn.disabled = false;

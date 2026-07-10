@@ -1,7 +1,11 @@
-// Recebe um tema e gera um texto pronto para publicar no LinkedIn usando a
-// API da Anthropic. Requer a secret ANTHROPIC_API_KEY configurada no projeto
-// Supabase (`supabase secrets set ANTHROPIC_API_KEY=...`).
+// Agente 1 (escritor): recebe um tema e gera um texto pronto para publicar
+// no LinkedIn usando a API da Anthropic. Em seguida chama o agente 2
+// (grade-linkedin-post) para avaliar o texto gerado, e devolve os dois
+// resultados juntos. Requer a secret ANTHROPIC_API_KEY configurada no
+// projeto Supabase (`supabase secrets set ANTHROPIC_API_KEY=...`).
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY")!;
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -21,6 +25,31 @@ const TONES: Record<string, string> = {
   storytelling: "em formato de storytelling, contando uma pequena história ou aprendizado",
   objetivo: "direto e objetivo, com foco em dados e resultados práticos",
 };
+
+// Chama o agente 2 (grade-linkedin-post) para avaliar o texto gerado pelo
+// agente 1. Se a avaliação falhar, retorna null em vez de derrubar a
+// resposta principal — o post gerado ainda é útil sem a nota.
+async function gradePost(post: string): Promise<unknown | null> {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/grade-linkedin-post`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+        "apikey": SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ post }),
+    });
+    if (!res.ok) {
+      console.error("grade-linkedin-post error:", res.status, await res.text());
+      return null;
+    }
+    return await res.json();
+  } catch (err) {
+    console.error("Falha ao chamar grade-linkedin-post:", err);
+    return null;
+  }
+}
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -88,5 +117,7 @@ Deno.serve(async (req: Request) => {
     return json({ error: "Resposta inesperada do modelo." }, 502);
   }
 
-  return json({ post });
+  const grade = await gradePost(post);
+
+  return json({ post, grade });
 });

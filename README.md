@@ -3,15 +3,28 @@
 ## Gerador de post para LinkedIn (`/linkedin`)
 
 Página com um formulário (tema + tom) que chama a Edge Function
-`generate-linkedin-post`, a qual usa a API da Anthropic (modelo
-`claude-opus-4-8`) para gerar o texto do post. Mesmo padrão do `index.html`
-na raiz: HTML/JS estático + Supabase.
+`generate-linkedin-post` (agente 1, escritor), a qual usa a API da Anthropic
+(modelo `claude-opus-4-8`) para gerar o texto do post. Mesmo padrão do
+`index.html` na raiz: HTML/JS estático + Supabase.
+
+**Dois agentes em cadeia:** depois de gerar o texto, `generate-linkedin-post`
+chama internamente (via HTTP, function-to-function) a Edge Function
+`grade-linkedin-post` (agente 2, avaliador), que classifica o post em uma de
+quatro categorias e devolve o resultado junto com o texto:
+- `executivo` — texto executivo bem formatado, com nota de 1 a 10
+- `tecnico` — texto técnico bem formatado, com nota de 1 a 10
+- `pessimo` — texto péssimo (sem nota)
+- `reescrever` — precisa de revisão antes de publicar (sem nota)
+
+A nota aparece na tela logo abaixo do texto gerado. Se a chamada ao agente
+avaliador falhar, o post ainda é exibido normalmente (a nota só some da
+tela).
 
 > **Requer a secret `ANTHROPIC_API_KEY`** configurada no projeto Supabase
-> (`ClaudeProjects`) para a Edge Function funcionar — configure com
+> (`ClaudeProjects`) para as duas Edge Functions funcionarem — configure com
 > `supabase secrets set ANTHROPIC_API_KEY=sk-ant-...` (via CLI, com o projeto
 > linkado) ou pelo dashboard do Supabase em Project Settings → Edge Functions
-> → Secrets. Sem essa secret, a function responde com erro 502.
+> → Secrets. Sem essa secret, as functions respondem com erro 502.
 
 ## Painel de Reports (`/reports`)
 
