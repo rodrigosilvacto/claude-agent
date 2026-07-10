@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Painel de Reports</title>
+  <link rel="stylesheet" href="./assets/styles.css" />
+</head>
+<body>
+  <div class="page">
+    <div class="topbar">
+      <h1>📋 Painel de Reports</h1>
+      <div class="user-chip">
+        <span id="user-email"></span>
+        <button class="secondary small" id="logout-btn">Sair</button>
+      </div>
+    </div>
+
+    <section class="dashboard" id="dashboard">
+      <div class="card stat-tile">
+        <div class="value" id="stat-total">–</div>
+        <div class="label">Reports no total</div>
+      </div>
+      <div class="card">
+        <div class="label" style="margin-bottom: 0.5rem;">Distribuição por tema</div>
+        <div id="theme-chart"></div>
+      </div>
+      <div class="card">
+        <div class="label" style="margin-bottom: 0.5rem;">Reports por semana (últimas 12)</div>
+        <div class="freq-chart" id="freq-chart"></div>
+      </div>
+    </section>
+
+    <div class="filters">
+      <input type="search" id="search-input" placeholder="Buscar por título ou resumo..." />
+      <select id="theme-filter">
+        <option value="">Todos os temas</option>
+      </select>
+      <input type="text" id="tag-filter" placeholder="Filtrar por tag" style="max-width: 160px;" />
+      <input type="date" id="date-from" title="A partir de" />
+      <input type="date" id="date-to" title="Até" />
+      <button class="secondary small" id="refresh-btn">↻ Atualizar</button>
+      <button id="upload-btn">+ Novo report</button>
+    </div>
+
+    <div id="reports-grid" class="grid">
+      <p class="spinner-text">Carregando reports...</p>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="upload-modal" style="display:none;">
+    <div class="modal">
+      <h2>Novo report</h2>
+      <form id="upload-form">
+        <div class="field">
+          <label for="file-input">Arquivo (PDF, DOCX, MD ou TXT — até 20MB)</label>
+          <input type="file" id="file-input" accept=".pdf,.docx,.md,.txt" required />
+        </div>
+        <div class="field">
+          <label for="title-input">Título</label>
+          <input type="text" id="title-input" required placeholder="Ex: Benchmark de concorrentes Q3" />
+        </div>
+        <div class="field">
+          <label for="theme-input">Tema</label>
+          <input type="text" id="theme-input" list="theme-options" required placeholder="Ex: Análise, PRD, Benchmark..." />
+          <datalist id="theme-options"></datalist>
+        </div>
+        <div class="field">
+          <label for="tags-input">Tags (separadas por vírgula)</label>
+          <input type="text" id="tags-input" placeholder="ex: marketing, q3, interno" />
+        </div>
+        <div class="message" id="upload-message"></div>
+        <div style="display:flex; gap:0.5rem; justify-content:flex-end; margin-top: 1rem;">
+          <button type="button" class="secondary" id="cancel-upload">Cancelar</button>
+          <button type="submit" id="submit-upload">Enviar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script type="module" src="./assets/app.js"></script>
+</body>
+</html>
