@@ -1,8 +1,8 @@
-import { supabase } from "./supabaseClient.js?v=11";
+import { supabase } from "./supabaseClient.js?v=12";
 
 // Bump this string on every change to app.js — it's how the topbar shows
 // whether the browser/CDN is actually serving the latest deployed script.
-const APP_JS_BUILD = "2026-07-10 02:05 UTC";
+const APP_JS_BUILD = "2026-07-10 10:17 UTC";
 const appBuildEl = document.getElementById("app-build");
 if (appBuildEl) appBuildEl.textContent = APP_JS_BUILD;
 
@@ -47,6 +47,7 @@ const els = {
 
 function closeViewModal() {
   els.viewModal.style.display = "none";
+  if (els.viewFrame.src.startsWith("blob:")) URL.revokeObjectURL(els.viewFrame.src);
   els.viewFrame.src = "about:blank";
 }
 
@@ -222,13 +223,21 @@ els.grid.addEventListener("click", async (event) => {
 async function handleView(report, btn) {
   btn.disabled = true;
   try {
-    const { data, error } = await supabase.storage
+    // Supabase Storage's signed URLs have served this bucket's files with the
+    // wrong Content-Type (confirmed via the browser downloading as .txt) even
+    // though the stored object metadata says text/html — so don't trust the
+    // network response's headers at all. Download the raw bytes and build a
+    // blob: URL with the type forced client-side; the browser can't get that
+    // one wrong since we set it ourselves.
+    const { data: blob, error } = await supabase.storage
       .from("reports")
-      .createSignedUrl(report.file_path, 300);
-    if (error || !data?.signedUrl) throw error || new Error("Não foi possível gerar o link do arquivo.");
+      .download(report.file_path);
+    if (error || !blob) throw error || new Error("Não foi possível baixar o arquivo.");
+
+    const objectUrl = URL.createObjectURL(new Blob([blob], { type: "text/html" }));
     els.viewTitle.textContent = report.title;
-    els.viewFrame.src = data.signedUrl;
-    els.viewNewTab.href = data.signedUrl;
+    els.viewFrame.src = objectUrl;
+    els.viewNewTab.href = objectUrl;
     els.viewModal.style.display = "flex";
   } catch (err) {
     alert("Erro ao abrir arquivo: " + err.message);
