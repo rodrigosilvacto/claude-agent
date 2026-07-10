@@ -1,4 +1,4 @@
-import { supabase } from "./supabaseClient.js?v=5";
+import { supabase } from "./supabaseClient.js?v=6";
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
 const ALLOWED_EXTENSIONS = ["pdf", "docx", "md", "txt", "html", "htm"];
@@ -28,7 +28,21 @@ const els = {
   uploadMessage: document.getElementById("upload-message"),
   cancelUpload: document.getElementById("cancel-upload"),
   submitUpload: document.getElementById("submit-upload"),
+  viewModal: document.getElementById("view-modal"),
+  viewFrame: document.getElementById("view-frame"),
+  viewTitle: document.getElementById("view-title"),
+  closeView: document.getElementById("close-view"),
 };
+
+function closeViewModal() {
+  els.viewModal.style.display = "none";
+  els.viewFrame.src = "about:blank";
+}
+
+els.closeView.addEventListener("click", closeViewModal);
+els.viewModal.addEventListener("click", (event) => {
+  if (event.target === els.viewModal) closeViewModal();
+});
 
 function escapeHtml(str) {
   return String(str ?? "").replace(/[&<>"']/g, (c) => ({
@@ -168,7 +182,7 @@ function renderGrid(reports) {
           <span>${formatDate(r.created_at)}</span>
         </div>
         <div class="card-actions">
-          <button class="secondary small" data-action="view">👁 Abrir arquivo</button>
+          <button class="secondary small" data-action="view">👁 Visualizar</button>
           <button class="secondary small" data-action="share">${r.share_enabled ? "🔗 Copiar link" : "Compartilhar"}</button>
           <button class="danger small" data-action="delete">Excluir</button>
         </div>
@@ -201,7 +215,9 @@ async function handleView(report, btn) {
       .from("reports")
       .createSignedUrl(report.file_path, 300);
     if (error || !data?.signedUrl) throw error || new Error("Não foi possível gerar o link do arquivo.");
-    window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+    els.viewTitle.textContent = report.title;
+    els.viewFrame.src = data.signedUrl;
+    els.viewModal.style.display = "flex";
   } catch (err) {
     alert("Erro ao abrir arquivo: " + err.message);
   } finally {

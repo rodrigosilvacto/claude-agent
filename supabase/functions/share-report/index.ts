@@ -40,7 +40,7 @@ Deno.serve(async (req: Request) => {
 
   const { data: report, error } = await client
     .from("reports")
-    .select("title, theme, tags, summary, summary_status, file_name, file_type, created_at, share_enabled, file_path")
+    .select("title, theme, tags, file_name, file_type, created_at, share_enabled, file_path")
     .eq("share_token", token)
     .maybeSingle();
 
@@ -61,8 +61,6 @@ Deno.serve(async (req: Request) => {
       title: report.title,
       theme: report.theme,
       tags: report.tags,
-      summary: report.summary,
-      summary_status: report.summary_status,
       file_name: report.file_name,
       file_type: report.file_type,
       created_at: report.created_at,
