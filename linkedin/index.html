@@ -51,6 +51,14 @@
     @media (prefers-color-scheme: dark) {
       p.subtitle { color: #a1a1a6; }
     }
+    p.build-info {
+      margin: -1rem 0 1.5rem;
+      font-size: 0.72rem;
+      color: #a1a1a6;
+    }
+    @media (prefers-color-scheme: dark) {
+      p.build-info { color: #6e6e73; }
+    }
     label {
       display: block;
       font-size: 0.85rem;
@@ -258,6 +266,7 @@
 
     <h1>Gerador de Post para LinkedIn</h1>
     <p class="subtitle">Descreva um tema e receba um texto pronto para publicar.</p>
+    <p class="build-info">build: <strong>2026-07-10 12:44 UTC</strong> — se essa data não bater com o último push, o navegador está com cache antigo.</p>
 
     <form id="generate-form">
       <label for="theme">Tema</label>
