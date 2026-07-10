@@ -20,6 +20,13 @@ A nota aparece na tela logo abaixo do texto gerado. Se a chamada ao agente
 avaliador falhar, o post ainda é exibido normalmente (a nota só some da
 tela).
 
+**Feedback iterativo:** abaixo da nota há um campo para o usuário pedir
+ajustes (ex: "deixe mais curto"). Ao clicar em "Gerar novo texto com esse
+feedback", o front-end chama `generate-linkedin-post` de novo enviando
+`feedback` + o texto atual (`previousPost`); o agente escritor reescreve o
+post em cima disso (em vez de partir do zero) e o agente avaliador roda de
+novo sobre o texto revisado. Pode repetir quantas vezes quiser.
+
 > **Requer a secret `ANTHROPIC_API_KEY`** configurada no projeto Supabase
 > (`ClaudeProjects`) para as duas Edge Functions funcionarem — configure com
 > `supabase secrets set ANTHROPIC_API_KEY=sk-ant-...` (via CLI, com o projeto

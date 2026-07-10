@@ -61,8 +61,10 @@ Deno.serve(async (req: Request) => {
 
   let theme: string | undefined;
   let tone: string | undefined;
+  let feedback: string | undefined;
+  let previousPost: string | undefined;
   try {
-    ({ theme, tone } = await req.json());
+    ({ theme, tone, feedback, previousPost } = await req.json());
   } catch {
     return json({ error: "Corpo da requisição inválido." }, 400);
   }
@@ -75,7 +77,25 @@ Deno.serve(async (req: Request) => {
     return json({ error: "theme muito longo (máx. 300 caracteres)." }, 400);
   }
 
+  feedback = feedback?.trim();
+  if (feedback && feedback.length > 500) {
+    return json({ error: "feedback muito longo (máx. 500 caracteres)." }, 400);
+  }
+  previousPost = previousPost?.trim();
+  if (previousPost && previousPost.length > 4000) {
+    return json({ error: "previousPost muito longo." }, 400);
+  }
+
   const toneDescription = TONES[tone ?? ""] ?? TONES.profissional;
+
+  // Se vier feedback + o post anterior, o agente revisa o texto existente em
+  // vez de escrever do zero — é o mesmo agente escritor, só que em modo de
+  // ajuste iterativo a partir do feedback do usuário.
+  const userContent = feedback && previousPost
+    ? `Post atual sobre o tema "${theme}":\n\n${previousPost}\n\n` +
+      `Feedback do usuário sobre esse post:\n"${feedback}"\n\n` +
+      `Reescreva o post aplicando esse feedback. Mantenha o tom ${toneDescription}, a menos que o feedback peça o contrário.`
+    : `Tema do post: "${theme}"\nTom desejado: ${toneDescription}.`;
 
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -99,7 +119,7 @@ Deno.serve(async (req: Request) => {
       messages: [
         {
           role: "user",
-          content: `Tema do post: "${theme}"\nTom desejado: ${toneDescription}.`,
+          content: userContent,
         },
       ],
     }),
