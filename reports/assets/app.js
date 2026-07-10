@@ -1,4 +1,4 @@
-import { supabase } from "./supabaseClient.js?v=3";
+import { supabase } from "./supabaseClient.js?v=4";
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
 const ALLOWED_EXTENSIONS = ["pdf", "docx", "md", "txt", "html", "htm"];
@@ -176,6 +176,7 @@ function renderGrid(reports) {
           <span>${formatDate(r.created_at)}</span>
         </div>
         <div class="card-actions">
+          <button class="secondary small" data-action="view">👁 Abrir arquivo</button>
           <button class="secondary small" data-action="share">${r.share_enabled ? "🔗 Copiar link" : "Compartilhar"}</button>
           <button class="secondary small" data-action="reprocess">↻ Reprocessar</button>
           <button class="danger small" data-action="delete">Excluir</button>
@@ -193,7 +194,9 @@ els.grid.addEventListener("click", async (event) => {
   const report = allReports.find((r) => r.id === reportId);
   if (!report) return;
 
-  if (btn.dataset.action === "share") {
+  if (btn.dataset.action === "view") {
+    await handleView(report, btn);
+  } else if (btn.dataset.action === "share") {
     await handleShare(report, btn);
   } else if (btn.dataset.action === "reprocess") {
     await handleReprocess(report, btn);
@@ -201,6 +204,21 @@ els.grid.addEventListener("click", async (event) => {
     await handleDelete(report, btn);
   }
 });
+
+async function handleView(report, btn) {
+  btn.disabled = true;
+  try {
+    const { data, error } = await supabase.storage
+      .from("reports")
+      .createSignedUrl(report.file_path, 300);
+    if (error || !data?.signedUrl) throw error || new Error("Não foi possível gerar o link do arquivo.");
+    window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+  } catch (err) {
+    alert("Erro ao abrir arquivo: " + err.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
 
 async function handleShare(report, btn) {
   btn.disabled = true;
