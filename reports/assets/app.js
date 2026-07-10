@@ -1,14 +1,10 @@
-import { supabase } from "./supabaseClient.js?v=7";
+import { supabase } from "./supabaseClient.js?v=8";
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
-const ALLOWED_EXTENSIONS = ["pdf", "docx", "md", "txt", "html", "htm"];
+const ALLOWED_EXTENSIONS = ["html", "htm"];
 
 const ANONYMOUS_AUTHOR = "Anônimo (login desabilitado)";
 const MIME_TYPES = {
-  pdf: "application/pdf",
-  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  md: "text/markdown",
-  txt: "text/plain",
   html: "text/html",
   htm: "text/html",
 };
@@ -304,7 +300,7 @@ els.uploadForm.addEventListener("submit", async (event) => {
 
     const ext = file.name.split(".").pop().toLowerCase();
     if (!ALLOWED_EXTENSIONS.includes(ext)) {
-      throw new Error("Formato não suportado. Envie PDF, DOCX, MD, TXT ou HTML.");
+      throw new Error("Formato não suportado. Envie um arquivo HTML.");
     }
     if (file.size > MAX_FILE_SIZE) {
       throw new Error("Arquivo maior que 20MB.");
@@ -325,7 +321,7 @@ els.uploadForm.addEventListener("submit", async (event) => {
 
     const { error: uploadError } = await supabase.storage
       .from("reports")
-      .upload(filePath, file, { contentType: MIME_TYPES[ext] || file.type || "application/octet-stream", upsert: false });
+      .upload(filePath, file, { contentType: MIME_TYPES[ext], upsert: false });
     if (uploadError) throw uploadError;
 
     const { error: insertError } = await supabase.from("reports").insert({
