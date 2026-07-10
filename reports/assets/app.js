@@ -1,7 +1,7 @@
 import { supabase } from "./supabaseClient.js";
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
-const ALLOWED_EXTENSIONS = ["pdf", "docx", "md", "txt"];
+const ALLOWED_EXTENSIONS = ["pdf", "docx", "md", "txt", "html", "htm"];
 
 const ANONYMOUS_AUTHOR = "Anônimo (login desabilitado)";
 let allReports = [];
@@ -291,7 +291,7 @@ els.uploadForm.addEventListener("submit", async (event) => {
 
     const ext = file.name.split(".").pop().toLowerCase();
     if (!ALLOWED_EXTENSIONS.includes(ext)) {
-      throw new Error("Formato não suportado. Envie PDF, DOCX, MD ou TXT.");
+      throw new Error("Formato não suportado. Envie PDF, DOCX, MD, TXT ou HTML.");
     }
     if (file.size > MAX_FILE_SIZE) {
       throw new Error("Arquivo maior que 20MB.");
