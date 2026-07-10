@@ -2,10 +2,18 @@
 
 ## Painel de Reports (`/reports`)
 
-Painel interno para centralizar reports (PDF/DOCX/MD/TXT): upload com
-tema/tags, resumo automático via Claude, busca/filtro, compartilhamento por
-link e dashboard de indicadores. Stack: HTML/JS estático + Supabase (Auth,
-Postgres, Storage, Edge Functions), mesmo padrão do `index.html` na raiz.
+Painel interno para centralizar reports (PDF/DOCX/MD/TXT/HTML, incluindo
+dashboards gerados pelo Claude): upload com tema/tags, busca/filtro,
+compartilhamento por link e dashboard de indicadores. Stack: HTML/JS
+estático + Supabase (Auth, Postgres, Storage, Edge Functions), mesmo padrão
+do `index.html` na raiz.
+
+> **Sem resumo automático (removido):** a geração de resumo via Claude foi
+> removida do MVP por depender de deploy de edge function + secret da
+> Anthropic, o que estava travando o fluxo de upload. As colunas
+> `summary`/`summary_status` continuam na tabela `reports` mas não são mais
+> usadas pelo frontend. Se quiser reativar, a lógica original está no
+> histórico do git (função `generate-summary` e botão "Reprocessar").
 
 Páginas: `reports/index.html` (painel principal) e `reports/share.html`
 (visualização pública read-only via link). `reports/login.html` fica com um
@@ -27,13 +35,9 @@ desabilitado**, ver abaixo.
      `reports`/`audit_logs`, RLS, bucket de storage `reports`)
    - `supabase/migrations/0003_disable_auth_requirement.sql` (abre o acesso
      para o anon key — só aplicar se realmente quiser o painel sem login)
-2. Deploy das Edge Functions `supabase/functions/generate-summary` e
-   `supabase/functions/share-report`.
-3. Configurar o secret `ANTHROPIC_API_KEY` no projeto Supabase (Dashboard →
-   Edge Functions → Secrets, ou `supabase secrets set ANTHROPIC_API_KEY=...`).
-   Sem essa chave o upload continua funcionando, mas o resumo automático fica
-   com status de erro até ser reprocessado.
-4. Magic link (Email OTP) no Supabase Auth pode continuar habilitado sem
+2. Deploy da Edge Function `supabase/functions/share-report` (usada pelo
+   link de compartilhamento).
+3. Magic link (Email OTP) no Supabase Auth pode continuar habilitado sem
    problema — o painel simplesmente não exige mais uma sessão para funcionar.
 
 ### Hospedagem (GitHub Pages) e cache

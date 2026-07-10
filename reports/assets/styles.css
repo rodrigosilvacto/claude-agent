@@ -256,16 +256,6 @@ input:focus, select:focus, textarea:focus {
   border-radius: 999px;
 }
 
-.summary-text {
-  font-size: 0.85rem;
-  color: var(--ink-muted);
-  flex: 1;
-  min-height: 3.5rem;
-}
-
-.summary-text.error { color: var(--danger); }
-.summary-text.pending { font-style: italic; }
-
 .meta {
   font-size: 0.75rem;
   color: var(--ink-muted);
