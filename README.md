@@ -1,5 +1,18 @@
 # claude-agent
 
+## Gerador de post para LinkedIn (`/linkedin`)
+
+Página com um formulário (tema + tom) que chama a Edge Function
+`generate-linkedin-post`, a qual usa a API da Anthropic (modelo
+`claude-opus-4-8`) para gerar o texto do post. Mesmo padrão do `index.html`
+na raiz: HTML/JS estático + Supabase.
+
+> **Requer a secret `ANTHROPIC_API_KEY`** configurada no projeto Supabase
+> (`ClaudeProjects`) para a Edge Function funcionar — configure com
+> `supabase secrets set ANTHROPIC_API_KEY=sk-ant-...` (via CLI, com o projeto
+> linkado) ou pelo dashboard do Supabase em Project Settings → Edge Functions
+> → Secrets. Sem essa secret, a function responde com erro 502.
+
 ## Painel de Reports (`/reports`)
 
 Painel interno para centralizar dashboards em HTML gerados pelo Claude:
