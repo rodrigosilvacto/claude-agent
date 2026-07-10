@@ -156,6 +156,13 @@
     @media (prefers-color-scheme: dark) {
       #grade-justificativa { color: #ccc; }
     }
+    #feedback-wrapper {
+      margin-top: 1.2rem;
+    }
+    #feedback-wrapper textarea {
+      resize: vertical;
+      min-height: 60px;
+    }
 
     /* Animação do pipeline: agente escritor -> agente avaliador -> concluído */
     #pipeline {
@@ -266,7 +273,7 @@
 
     <h1>Gerador de Post para LinkedIn</h1>
     <p class="subtitle">Descreva um tema e receba um texto pronto para publicar.</p>
-    <p class="build-info">build: <strong>2026-07-10 12:44 UTC</strong> — se essa data não bater com o último push, o navegador está com cache antigo.</p>
+    <p class="build-info">build: <strong>2026-07-10 13:01 UTC</strong> — se essa data não bater com o último push, o navegador está com cache antigo.</p>
 
     <form id="generate-form">
       <label for="theme">Tema</label>
@@ -294,6 +301,13 @@
         <div id="grade-label"></div>
         <p id="grade-justificativa"></p>
       </div>
+
+      <div id="feedback-wrapper">
+        <label for="feedback">Não ficou como você queria? Peça um ajuste</label>
+        <textarea id="feedback" maxlength="500" rows="2"
+          placeholder="Ex: deixe mais curto e menos formal, remova as hashtags..."></textarea>
+        <button type="button" class="secondary" id="feedback-btn">Gerar novo texto com esse feedback</button>
+      </div>
     </div>
   </div>
 
@@ -314,6 +328,8 @@
     const gradeWrapper = document.getElementById("grade-wrapper");
     const gradeLabelEl = document.getElementById("grade-label");
     const gradeJustificativaEl = document.getElementById("grade-justificativa");
+    const feedbackEl = document.getElementById("feedback");
+    const feedbackBtn = document.getElementById("feedback-btn");
 
     const pipelineEl = document.getElementById("pipeline");
     const pipelineSteps = {
@@ -390,22 +406,18 @@
       gradeWrapper.style.display = "block";
     }
 
-    form.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      submitBtn.disabled = true;
-      submitBtn.textContent = "Gerando...";
+    // Chama o agente 1 (que por sua vez chama o agente 2 internamente) e
+    // atualiza a tela com o resultado. Usado tanto na geração inicial quanto
+    // na regeneração a partir do feedback do usuário.
+    async function runGeneration(body, busyButton, busyText, idleText) {
+      busyButton.disabled = true;
+      busyButton.textContent = busyText;
       messageEl.textContent = "";
       messageEl.className = "";
-      resultWrapper.style.display = "none";
       gradeWrapper.style.display = "none";
       startPipeline();
 
-      const theme = document.getElementById("theme").value.trim();
-      const tone = document.getElementById("tone").value;
-
-      const { data, error } = await supabase.functions.invoke("generate-linkedin-post", {
-        body: { theme, tone },
-      });
+      const { data, error } = await supabase.functions.invoke("generate-linkedin-post", { body });
 
       if (error || !data?.post) {
         messageEl.textContent = data?.error || error?.message || "Erro ao gerar o post.";
@@ -416,10 +428,40 @@
         resultWrapper.style.display = "block";
         renderGrade(data.grade);
         finishPipeline(true);
+        feedbackEl.value = "";
       }
 
-      submitBtn.disabled = false;
-      submitBtn.textContent = "Gerar post";
+      busyButton.disabled = false;
+      busyButton.textContent = idleText;
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      resultWrapper.style.display = "none";
+
+      const theme = document.getElementById("theme").value.trim();
+      const tone = document.getElementById("tone").value;
+
+      await runGeneration({ theme, tone }, submitBtn, "Gerando...", "Gerar post");
+    });
+
+    feedbackBtn.addEventListener("click", async () => {
+      const feedback = feedbackEl.value.trim();
+      if (!feedback) {
+        feedbackEl.focus();
+        return;
+      }
+
+      const theme = document.getElementById("theme").value.trim();
+      const tone = document.getElementById("tone").value;
+      const previousPost = resultEl.value;
+
+      await runGeneration(
+        { theme, tone, feedback, previousPost },
+        feedbackBtn,
+        "Aplicando feedback...",
+        "Gerar novo texto com esse feedback",
+      );
     });
 
     copyBtn.addEventListener("click", async () => {
