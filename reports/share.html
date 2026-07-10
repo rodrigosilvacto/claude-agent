@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Report compartilhado</title>
+  <link rel="stylesheet" href="./assets/styles.css" />
+</head>
+<body>
+  <div class="page" style="max-width: 720px;">
+    <div id="content">
+      <p class="spinner-text">Carregando report...</p>
+    </div>
+  </div>
+
+  <script type="module">
+    import { supabase, SUPABASE_URL } from "./assets/supabaseClient.js";
+
+    const content = document.getElementById("content");
+
+    function escapeHtml(str) {
+      return String(str ?? "").replace(/[&<>"']/g, (c) => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+      }[c]));
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("token");
+
+    if (!token) {
+      content.innerHTML = '<div class="card empty-state">Link inválido: faltando token.</div>';
+    } else {
+      try {
+        const { data, error } = await supabase.functions.invoke("share-report", {
+          body: { token },
+        });
+
+        if (error || !data?.report) {
+          throw new Error(data?.error || error?.message || "Link inválido ou desativado.");
+        }
+
+        const r = data.report;
+        const tagsHtml = (r.tags || [])
+          .map((t) => `<span class="tag">${escapeHtml(t)}</span>`)
+          .join("");
+        const date = new Date(r.created_at).toLocaleDateString("pt-BR", {
+          year: "numeric", month: "long", day: "numeric",
+        });
+        const summaryHtml = r.summary_status === "ready" && r.summary
+          ? escapeHtml(r.summary)
+          : r.summary_status === "error"
+            ? "Não foi possível gerar o resumo automático deste report."
+            : "Resumo ainda sendo gerado...";
+
+        content.innerHTML = `
+          <div class="card">
+            <span class="badge">${escapeHtml(r.theme)}</span>
+            <h1 style="margin: 0.6rem 0 0.2rem;">${escapeHtml(r.title)}</h1>
+            <p class="hint">Publicado em ${date}</p>
+            <div class="tags" style="margin: 0.5rem 0 1rem;">${tagsHtml}</div>
+            <p style="line-height: 1.5;">${summaryHtml}</p>
+            <a class="btn" href="${data.fileUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-block; margin-top: 0.75rem;">
+              Abrir arquivo (${escapeHtml(r.file_name)})
+            </a>
+          </div>
+          <p class="hint" style="text-align:center; margin-top: 1rem;">
+            Visualização somente leitura via link de compartilhamento.
+          </p>
+        `;
+      } catch (err) {
+        content.innerHTML = `<div class="card empty-state">${escapeHtml(err.message || "Não foi possível carregar este report.")}</div>`;
+      }
+    }
+  </script>
+</body>
+</html>
