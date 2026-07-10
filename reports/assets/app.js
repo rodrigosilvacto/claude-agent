@@ -1,4 +1,4 @@
-import { supabase } from "./supabaseClient.js?v=4";
+import { supabase } from "./supabaseClient.js?v=5";
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
 const ALLOWED_EXTENSIONS = ["pdf", "docx", "md", "txt", "html", "htm"];
@@ -131,7 +131,7 @@ function applyFilters() {
   const to = els.dateTo.value ? new Date(els.dateTo.value + "T23:59:59") : null;
 
   const filtered = allReports.filter((r) => {
-    if (q && !(r.title.toLowerCase().includes(q) || (r.summary || "").toLowerCase().includes(q))) return false;
+    if (q && !r.title.toLowerCase().includes(q)) return false;
     if (theme && r.theme !== theme) return false;
     if (tag && !(r.tags || []).some((t) => t.toLowerCase().includes(tag))) return false;
     const created = new Date(r.created_at);
@@ -150,12 +150,6 @@ function applyFilters() {
 
 els.refreshBtn.addEventListener("click", loadReports);
 
-function summaryStatusHtml(r) {
-  if (r.summary_status === "ready") return escapeHtml(r.summary || "");
-  if (r.summary_status === "error") return "Não foi possível gerar o resumo automático. Tente reprocessar.";
-  return "Gerando resumo automático...";
-}
-
 function renderGrid(reports) {
   if (!reports.length) {
     els.grid.innerHTML = '<div class="card empty-state">Nenhum report encontrado com os filtros atuais.</div>';
@@ -164,21 +158,18 @@ function renderGrid(reports) {
 
   els.grid.innerHTML = reports.map((r) => {
     const tagsHtml = (r.tags || []).map((t) => `<span class="tag">${escapeHtml(t)}</span>`).join("");
-    const statusClass = r.summary_status === "error" ? "error" : r.summary_status === "pending" ? "pending" : "";
     return `
       <div class="card report-card" data-id="${r.id}">
         <span class="badge">${escapeHtml(r.theme)}</span>
         <h3>${escapeHtml(r.title)}</h3>
         <div class="tags">${tagsHtml}</div>
-        <p class="summary-text ${statusClass}">${summaryStatusHtml(r)}</p>
-        <div class="meta">
+        <div class="meta" style="margin-top: auto;">
           <span>${escapeHtml(r.author_email)}</span>
           <span>${formatDate(r.created_at)}</span>
         </div>
         <div class="card-actions">
           <button class="secondary small" data-action="view">👁 Abrir arquivo</button>
           <button class="secondary small" data-action="share">${r.share_enabled ? "🔗 Copiar link" : "Compartilhar"}</button>
-          <button class="secondary small" data-action="reprocess">↻ Reprocessar</button>
           <button class="danger small" data-action="delete">Excluir</button>
         </div>
       </div>
@@ -198,8 +189,6 @@ els.grid.addEventListener("click", async (event) => {
     await handleView(report, btn);
   } else if (btn.dataset.action === "share") {
     await handleShare(report, btn);
-  } else if (btn.dataset.action === "reprocess") {
-    await handleReprocess(report, btn);
   } else if (btn.dataset.action === "delete") {
     await handleDelete(report, btn);
   }
@@ -247,24 +236,6 @@ async function copyToClipboard(text) {
     await navigator.clipboard.writeText(text);
   } catch {
     window.prompt("Copie o link:", text);
-  }
-}
-
-async function handleReprocess(report, btn) {
-  btn.disabled = true;
-  const original = btn.textContent;
-  btn.textContent = "Gerando...";
-  try {
-    await supabase.from("reports").update({ summary_status: "pending" }).eq("id", report.id);
-    await loadReports();
-    const { error } = await supabase.functions.invoke("generate-summary", {
-      body: { reportId: report.id },
-    });
-    if (error) throw error;
-  } catch (err) {
-    console.error(err);
-  } finally {
-    await loadReports();
   }
 }
 
@@ -346,16 +317,11 @@ els.uploadForm.addEventListener("submit", async (event) => {
     });
     if (insertError) throw insertError;
 
-    els.uploadMessage.textContent = "Report enviado! Gerando resumo automático...";
+    els.uploadMessage.textContent = "Report enviado!";
     els.uploadMessage.className = "message success";
 
     await loadReports();
     els.uploadModal.style.display = "none";
-
-    // Fire and forget — the card shows "gerando resumo" until this resolves.
-    supabase.functions
-      .invoke("generate-summary", { body: { reportId } })
-      .finally(() => loadReports());
   } catch (err) {
     els.uploadMessage.textContent = "Erro: " + err.message;
     els.uploadMessage.className = "message error";
