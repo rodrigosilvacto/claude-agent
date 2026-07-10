@@ -1,9 +1,17 @@
-import { supabase } from "./supabaseClient.js?v=6";
+import { supabase } from "./supabaseClient.js?v=7";
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
 const ALLOWED_EXTENSIONS = ["pdf", "docx", "md", "txt", "html", "htm"];
 
 const ANONYMOUS_AUTHOR = "Anônimo (login desabilitado)";
+const MIME_TYPES = {
+  pdf: "application/pdf",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  md: "text/markdown",
+  txt: "text/plain",
+  html: "text/html",
+  htm: "text/html",
+};
 let allReports = [];
 
 const els = {
@@ -317,7 +325,7 @@ els.uploadForm.addEventListener("submit", async (event) => {
 
     const { error: uploadError } = await supabase.storage
       .from("reports")
-      .upload(filePath, file, { contentType: file.type || undefined, upsert: false });
+      .upload(filePath, file, { contentType: MIME_TYPES[ext] || file.type || "application/octet-stream", upsert: false });
     if (uploadError) throw uploadError;
 
     const { error: insertError } = await supabase.from("reports").insert({
