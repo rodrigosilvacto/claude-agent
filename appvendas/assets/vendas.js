@@ -66,7 +66,7 @@ export async function render(view, actionsEl) {
 }
 
 async function loadClientes() {
-  const { data } = await supabase.from("clientes").select("id, nome, documento").eq("ativo", true).order("nome", { ascending: true });
+  const { data } = await supabase.from("clientes").select("id, nome, documento").eq("ativo", true).eq("status_cadastro", "aprovado").order("nome", { ascending: true });
   return data || [];
 }
 

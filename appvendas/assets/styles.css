@@ -442,6 +442,71 @@ svg {
   margin-bottom: 1rem;
 }
 
+/* ── Pré-cadastro (tela pública, sem login) ───────────────────────── */
+
+.precadastro-screen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1.5rem;
+  background:
+    radial-gradient(circle at 15% 10%, rgba(47, 143, 82, 0.09), transparent 45%),
+    radial-gradient(circle at 85% 90%, rgba(207, 138, 31, 0.1), transparent 45%),
+    var(--paper);
+}
+
+.precadastro-card {
+  width: 100%;
+  max-width: 560px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-pop);
+  padding: 2.4rem 2.2rem 2.2rem;
+}
+
+.precadastro-title {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  margin: 0.9rem 0 0.5rem;
+  color: var(--text);
+}
+
+.precadastro-success {
+  text-align: center;
+  padding: 1.5rem 0.5rem;
+}
+
+.precadastro-success__icon {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent-deep);
+}
+
+.precadastro-success__title {
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: var(--text);
+  margin: 0 0 0.5rem;
+}
+
+.precadastro-success__hint {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  max-width: 380px;
+  margin: 0 auto;
+}
+
 /* ── Buttons ───────────────────────────────────────────────────────── */
 
 .btn {
@@ -863,6 +928,9 @@ svg {
 .status--inativo { color: var(--text-muted); background: var(--line); }
 .status--admin { color: var(--amber-deep); background: var(--amber-soft); }
 .status--caixa { color: var(--text-muted); background: var(--line); }
+.status--pendente { color: var(--warning); background: var(--warning-soft); }
+.status--aprovado { color: var(--success); background: var(--success-soft); }
+.status--reprovado { color: var(--danger); background: var(--danger-soft); }
 
 /* ── Empty state ───────────────────────────────────────────────────── */
 

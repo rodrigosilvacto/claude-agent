@@ -86,7 +86,16 @@ logoutBtn.addEventListener("click", async () => {
   await signOut();
 });
 
+// Se uma navegação nova começar antes de uma anterior terminar de carregar
+// seu módulo (ex.: login concluído e o usuário já clica em outro link antes
+// da Home acabar de montar), a chamada antiga não pode mais escrever no
+// DOM — senão as duas rodam `render()` em cima do mesmo container e
+// duplicam elementos (ex.: botões da toolbar aparecendo repetidos).
+let renderToken = 0;
+
 async function renderRoute() {
+  const myToken = ++renderToken;
+
   if (!isLoggedIn()) {
     stopAutoRefresh();
     breadcrumbEl.textContent = "";
@@ -94,6 +103,7 @@ async function renderRoute() {
     topbarActionsEl.innerHTML = "";
     closeNavDrawer();
     const mod = await import("./login.js");
+    if (myToken !== renderToken) return;
     mod.render(viewEl);
     return;
   }
@@ -130,9 +140,11 @@ async function renderRoute() {
   try {
     const mod = await route.load();
     clearTimeout(loadingTimer);
+    if (myToken !== renderToken) return;
     await mod.render(viewEl, topbarActionsEl);
   } catch (err) {
     clearTimeout(loadingTimer);
+    if (myToken !== renderToken) return;
     console.error(err);
     viewEl.innerHTML = `<div class="empty-state"><p class="empty-state__title">Não foi possível carregar esta tela</p><p class="empty-state__hint">${escapeHtml(err.message || String(err))}</p></div>`;
   }

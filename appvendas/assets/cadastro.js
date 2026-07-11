@@ -101,6 +101,7 @@ function renderTable(config, view, card, data, state) {
         return `<td class="${classes}"${style}>${col.render ? col.render(row) : escapeHtml(row[col.key] ?? "—")}</td>`;
       }).join("")}
       <td class="cell-actions">
+        ${config.rowActions ? config.rowActions(row) : ""}
         <button type="button" class="btn btn--ghost btn--sm" data-edit="${row.id}">Editar</button>
         <button type="button" class="btn btn--danger btn--sm" data-delete="${row.id}">Excluir</button>
       </td>
@@ -159,6 +160,13 @@ function renderTable(config, view, card, data, state) {
       }
       showToast(`${config.titleSingular} excluído.`);
       loadRows(config, view, view.querySelector("#search-input").value.trim(), state);
+    });
+  });
+
+  card.querySelectorAll("[data-row-action]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const row = data.find((r) => r.id === btn.dataset.rowActionId);
+      config.onRowAction(btn.dataset.rowAction, row, () => loadRows(config, view, view.querySelector("#search-input").value.trim(), state));
     });
   });
 }
@@ -236,7 +244,10 @@ async function openForm(config, existingRow, onSaved) {
     const { error } = await query;
 
     if (error) {
-      errorEl.innerHTML = `<div class="form-error">${escapeHtml(error.message)}</div>`;
+      const friendly = error.code === "23505"
+        ? "Já existe um registro com os mesmos dados (verifique se algum campo precisa ser único, como o documento)."
+        : error.message;
+      errorEl.innerHTML = `<div class="form-error">${escapeHtml(friendly)}</div>`;
       return;
     }
 
