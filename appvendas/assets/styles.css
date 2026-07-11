@@ -252,14 +252,29 @@ svg {
   white-space: nowrap;
 }
 
-.user-chip #logout-btn {
-  flex-shrink: 0;
+.logout-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  margin-top: 0.9rem;
+  padding: 0.55rem 0.7rem;
+  background: transparent;
+  border: 1px solid var(--ink-line);
+  border-radius: var(--radius-sm);
   color: var(--ink-text-muted);
+  font-family: var(--font-sans);
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
 }
 
-.user-chip #logout-btn:hover {
+.logout-btn:hover {
   color: #ffffff;
-  background: var(--ink-soft);
+  background: var(--danger-deep);
+  border-color: var(--danger-deep);
 }
 
 .user-chip__avatar {

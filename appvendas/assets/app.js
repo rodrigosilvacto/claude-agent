@@ -102,7 +102,9 @@ async function renderRoute() {
   let routeKey = ROUTES[hash] ? hash : DEFAULT_ROUTE;
   if (ROUTES[routeKey].adminOnly && !isAdmin()) {
     routeKey = DEFAULT_ROUTE;
-    window.location.hash = `#/${DEFAULT_ROUTE}`;
+    // replaceState em vez de mudar window.location.hash: corrige a URL sem
+    // disparar um "hashchange" que renderizaria a rota padrão de novo.
+    history.replaceState(null, "", `#/${DEFAULT_ROUTE}`);
   }
   const route = ROUTES[routeKey];
 

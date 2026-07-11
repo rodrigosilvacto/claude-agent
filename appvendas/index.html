@@ -7,10 +7,10 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./assets/styles.css?v=4" />
+  <link rel="stylesheet" href="./assets/styles.css?v=5" />
 </head>
 <body>
-  <div class="app-shell" id="app-shell">
+  <div class="app-shell is-locked" id="app-shell">
     <div class="sidebar-scrim" id="sidebar-scrim"></div>
 
     <aside class="sidebar" id="sidebar">
@@ -78,10 +78,11 @@
             <p class="user-chip__name" id="user-chip-name">—</p>
             <p class="user-chip__meta" id="user-chip-meta">—</p>
           </div>
-          <button type="button" class="icon-btn" id="logout-btn" aria-label="Sair" title="Sair">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
-          </button>
         </div>
+        <button type="button" class="logout-btn" id="logout-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
+          <span>Sair</span>
+        </button>
       </div>
     </aside>
 
@@ -115,6 +116,6 @@
 
   <div class="toast-stack" id="toast-stack" aria-live="assertive"></div>
 
-  <script type="module" src="./assets/app.js?v=4"></script>
+  <script type="module" src="./assets/app.js?v=6"></script>
 </body>
 </html>

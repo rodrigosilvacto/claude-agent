@@ -36,9 +36,54 @@ async function loadUsuario(userId) {
   return data || null;
 }
 
+// Revalida periodicamente se a conta logada continua ativa, sem depender só
+// da renovação de token (que só acontece ~1x por hora). Se um admin desativar
+// alguém com sessão aberta, essa checagem derruba a sessão em até 1 minuto —
+// sem re-renderizar nada enquanto a conta continuar ativa.
+let ativoWatchTimer = null;
+let ativoWatchFocusHandler = null;
+
+function startAtivoWatch(userId) {
+  stopAtivoWatch();
+  const check = async () => {
+    if (document.hidden) return;
+    const { data } = await supabase.from("usuarios").select("ativo").eq("id", userId).maybeSingle();
+    if (!data || !data.ativo) await signOut();
+  };
+  ativoWatchTimer = setInterval(check, 60000);
+  ativoWatchFocusHandler = check;
+  window.addEventListener("focus", ativoWatchFocusHandler);
+}
+
+function stopAtivoWatch() {
+  if (ativoWatchTimer) {
+    clearInterval(ativoWatchTimer);
+    ativoWatchTimer = null;
+  }
+  if (ativoWatchFocusHandler) {
+    window.removeEventListener("focus", ativoWatchFocusHandler);
+    ativoWatchFocusHandler = null;
+  }
+}
+
 async function refresh(session) {
-  currentSession = session || null;
+  const nextSession = session || null;
+
+  // Evita trabalho e re-render duplicados quando o estado não mudou de fato
+  // (ex.: signOut() explícito seguido do evento SIGNED_OUT automático, ou o
+  // evento SIGNED_IN chegando logo depois do refresh manual em signIn()).
+  if (!nextSession && !currentSession) return;
+  if (nextSession && currentSession && nextSession.access_token === currentSession.access_token) return;
+
+  currentSession = nextSession;
   currentUsuario = currentSession ? await loadUsuario(currentSession.user.id) : null;
+
+  if (currentSession && currentUsuario && currentUsuario.ativo) {
+    startAtivoWatch(currentSession.user.id);
+  } else {
+    stopAtivoWatch();
+  }
+
   listeners.forEach((fn) => fn());
 }
 
@@ -55,7 +100,17 @@ export function initAuth() {
       const { data } = await supabase.auth.getSession();
       await refresh(data.session);
       ready = true;
-      supabase.auth.onAuthStateChange((_event, session) => {
+      supabase.auth.onAuthStateChange((event, session) => {
+        // INITIAL_SESSION já foi tratado pelo getSession() acima. TOKEN_REFRESHED
+        // acontece em segundo plano só pra renovar o JWT — o usuário continua o
+        // mesmo, então não há motivo pra re-renderizar a tela (isso já causou
+        // perda de carrinho em andamento na tela de Vendas). Só atualizamos o
+        // token em memória e seguimos.
+        if (event === "INITIAL_SESSION") return;
+        if (event === "TOKEN_REFRESHED") {
+          if (session) currentSession = session;
+          return;
+        }
         refresh(session);
       });
     })();
