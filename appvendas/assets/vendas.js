@@ -76,7 +76,7 @@ function renderNovaVenda(content) {
             <label for="v-data">Data</label>
             <input class="input" type="date" id="v-data" value="${new Date().toISOString().slice(0, 10)}" />
           </div>
-          <div class="field">
+          <div class="field field--full">
             <label>Forma de pagamento</label>
             <div class="segmented" id="v-forma" role="radiogroup" aria-label="Forma de pagamento">
               ${FORMAS_PAGAMENTO.map((forma, idx) => `

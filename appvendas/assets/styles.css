@@ -502,13 +502,15 @@ svg {
 /* ── Segmented control (replaces small fixed <select> pickers) ───────── */
 
 .segmented {
-  display: inline-flex;
+  display: flex;
   flex-wrap: wrap;
+  width: 100%;
   gap: 0.3rem;
   padding: 0.3rem;
   background: var(--paper);
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm);
+  box-sizing: border-box;
 }
 
 .segmented__btn {
@@ -521,6 +523,9 @@ svg {
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
+  flex: 1 1 auto;
+  white-space: nowrap;
+  text-align: center;
   transition: background 0.12s ease, color 0.12s ease, box-shadow 0.12s ease;
 }
 
