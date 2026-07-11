@@ -5,6 +5,7 @@
 
 import { supabase } from "./supabaseClient.js";
 import { showToast, openModal, closeModal, confirmDialog, escapeHtml, skeletonTable, createSearchSelect, registerAutoRefresh } from "./app.js";
+import { consultarCep } from "./cep.js";
 
 const SEARCH_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>';
 
@@ -208,6 +209,11 @@ async function openForm(config, existingRow, onSaved) {
     });
   }
 
+  for (const field of config.fields) {
+    if (field.type !== "cep") continue;
+    wireCepField(body, field);
+  }
+
   body.querySelector("#btn-cancel").addEventListener("click", closeModal);
 
   body.querySelector("#cadastro-form").addEventListener("submit", async (e) => {
@@ -257,6 +263,42 @@ async function openForm(config, existingRow, onSaved) {
   });
 }
 
+// Ao sair do campo de CEP, consulta o endereço e preenche os campos
+// mapeados em `field.autofillMap` (ex.: { logradouro: "endereco", localidade:
+// "cidade", uf: "uf" }) — sem travar o resto do formulário se a consulta falhar.
+function wireCepField(body, field) {
+  const input = body.querySelector(`#f-${field.key}`);
+  const hint = body.querySelector(`#f-${field.key}-hint`);
+  const form = body.querySelector("#cadastro-form");
+
+  input.addEventListener("blur", async () => {
+    const digits = input.value.replace(/\D/g, "");
+    if (!digits) {
+      hint.hidden = true;
+      return;
+    }
+
+    hint.hidden = false;
+    hint.className = "field-hint";
+    hint.textContent = "Buscando endereço…";
+
+    try {
+      const endereco = await consultarCep(digits);
+      hint.hidden = true;
+      if (field.autofillMap) {
+        for (const [sourceKey, targetName] of Object.entries(field.autofillMap)) {
+          const targetInput = form.elements[targetName];
+          if (targetInput && endereco[sourceKey]) targetInput.value = endereco[sourceKey];
+        }
+      }
+    } catch (err) {
+      hint.hidden = false;
+      hint.className = "field-hint field-hint--error";
+      hint.textContent = err.message;
+    }
+  });
+}
+
 function renderField(field, existingRow, options) {
   const value = existingRow ? existingRow[field.key] : field.default;
   const wrapClass = field.full ? "field field--full" : "field";
@@ -298,6 +340,16 @@ function renderField(field, existingRow, options) {
       <div class="${wrapClass}">
         <label for="f-${field.key}">${escapeHtml(field.label)}${requiredMark}</label>
         <textarea class="input" id="f-${field.key}" name="${field.key}" rows="3" ${required}>${escapeHtml(value ?? "")}</textarea>
+      </div>
+    `;
+  }
+
+  if (field.type === "cep") {
+    return `
+      <div class="${wrapClass}">
+        <label for="f-${field.key}">${escapeHtml(field.label)}${requiredMark}</label>
+        <input class="input" type="text" id="f-${field.key}" name="${field.key}" value="${escapeHtml(value ?? "")}" placeholder="00000-000" inputmode="numeric" ${required} />
+        <p class="field-hint" id="f-${field.key}-hint" hidden></p>
       </div>
     `;
   }

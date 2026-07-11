@@ -30,11 +30,12 @@ export async function render(view, actionsEl) {
     fields: [
       { key: "nome", label: "Nome", required: true, full: true },
       { key: "documento", label: "CPF/CNPJ" },
-      { key: "email", label: "E-mail", type: "email" },
-      { key: "telefone", label: "Telefone" },
+      { key: "cep", label: "CEP", type: "cep", autofillMap: { logradouro: "endereco", localidade: "cidade", uf: "uf" } },
+      { key: "endereco", label: "Endereço", full: true },
       { key: "cidade", label: "Cidade" },
       { key: "uf", label: "UF" },
-      { key: "endereco", label: "Endereço", full: true },
+      { key: "email", label: "E-mail", type: "email" },
+      { key: "telefone", label: "Telefone" },
       { key: "ativo", label: "Cliente ativo", type: "checkbox", default: true, full: true },
     ],
     rowActions: (row) => {

@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./assets/styles.css?v=8" />
+  <link rel="stylesheet" href="./assets/styles.css?v=9" />
 </head>
 <body>
   <div class="precadastro-screen">
@@ -30,13 +30,14 @@
             <label for="pc-documento">CPF/CNPJ<span class="field-required">*</span></label>
             <input class="input" type="text" id="pc-documento" name="documento" placeholder="Só números ou com pontuação" required />
           </div>
-          <div class="field">
-            <label for="pc-email">E-mail</label>
-            <input class="input" type="email" id="pc-email" name="email" />
+          <div class="field field--full">
+            <label for="pc-cep">CEP</label>
+            <input class="input" type="text" id="pc-cep" name="cep" placeholder="00000-000" inputmode="numeric" />
+            <p class="field-hint" id="pc-cep-hint" hidden></p>
           </div>
-          <div class="field">
-            <label for="pc-telefone">Telefone</label>
-            <input class="input" type="text" id="pc-telefone" name="telefone" />
+          <div class="field field--full">
+            <label for="pc-endereco">Endereço</label>
+            <input class="input" type="text" id="pc-endereco" name="endereco" />
           </div>
           <div class="field">
             <label for="pc-cidade">Cidade</label>
@@ -46,9 +47,13 @@
             <label for="pc-uf">UF</label>
             <input class="input" type="text" id="pc-uf" name="uf" maxlength="2" style="text-transform: uppercase;" />
           </div>
-          <div class="field field--full">
-            <label for="pc-endereco">Endereço</label>
-            <input class="input" type="text" id="pc-endereco" name="endereco" />
+          <div class="field">
+            <label for="pc-email">E-mail</label>
+            <input class="input" type="email" id="pc-email" name="email" />
+          </div>
+          <div class="field">
+            <label for="pc-telefone">Telefone</label>
+            <input class="input" type="text" id="pc-telefone" name="telefone" />
           </div>
         </div>
         <button type="submit" class="btn btn--primary" id="precadastro-submit" style="width:100%; justify-content:center; margin-top: 1.25rem;">Enviar cadastro</button>
@@ -58,6 +63,6 @@
     </div>
   </div>
 
-  <script type="module" src="./assets/pre-cadastro.js?v=1"></script>
+  <script type="module" src="./assets/pre-cadastro.js?v=2"></script>
 </body>
 </html>

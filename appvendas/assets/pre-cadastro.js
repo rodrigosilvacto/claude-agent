@@ -3,6 +3,7 @@
 // ser aberta por alguém que não é da equipe.
 
 import { supabase } from "./supabaseClient.js";
+import { consultarCep } from "./cep.js";
 
 function escapeHtml(str) {
   return String(str ?? "").replace(/[&<>"']/g, (c) => ({
@@ -19,6 +20,33 @@ const errorEl = document.getElementById("precadastro-error");
 const submitBtn = document.getElementById("precadastro-submit");
 const successEl = document.getElementById("precadastro-success");
 
+const cepInput = document.getElementById("pc-cep");
+const cepHint = document.getElementById("pc-cep-hint");
+
+cepInput.addEventListener("blur", async () => {
+  const digits = cepInput.value.replace(/\D/g, "");
+  if (!digits) {
+    cepHint.hidden = true;
+    return;
+  }
+
+  cepHint.hidden = false;
+  cepHint.className = "field-hint";
+  cepHint.textContent = "Buscando endereço…";
+
+  try {
+    const endereco = await consultarCep(digits);
+    cepHint.hidden = true;
+    if (endereco.logradouro) form.elements.endereco.value = endereco.logradouro;
+    if (endereco.localidade) form.elements.cidade.value = endereco.localidade;
+    if (endereco.uf) form.elements.uf.value = endereco.uf;
+  } catch (err) {
+    cepHint.hidden = false;
+    cepHint.className = "field-hint field-hint--error";
+    cepHint.textContent = err.message;
+  }
+});
+
 form.addEventListener("submit", async (e) => {
   e.preventDefault();
   errorEl.innerHTML = "";
@@ -30,6 +58,7 @@ form.addEventListener("submit", async (e) => {
     p_documento: form.elements.documento.value,
     p_email: form.elements.email.value || null,
     p_telefone: form.elements.telefone.value || null,
+    p_cep: form.elements.cep.value || null,
     p_cidade: form.elements.cidade.value || null,
     p_uf: form.elements.uf.value || null,
     p_endereco: form.elements.endereco.value || null,
