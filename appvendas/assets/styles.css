@@ -240,6 +240,28 @@ svg {
   gap: 0.65rem;
 }
 
+.user-chip > div {
+  min-width: 0;
+  flex: 1;
+}
+
+.user-chip__name,
+.user-chip__meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-chip #logout-btn {
+  flex-shrink: 0;
+  color: var(--ink-text-muted);
+}
+
+.user-chip #logout-btn:hover {
+  color: #ffffff;
+  background: var(--ink-soft);
+}
+
 .user-chip__avatar {
   width: 34px;
   height: 34px;
@@ -336,6 +358,65 @@ svg {
 .view {
   padding: 1.6rem 2.1rem 3rem;
   flex: 1;
+}
+
+/* ── Login ─────────────────────────────────────────────────────────── */
+
+.app-shell.is-locked .sidebar,
+.app-shell.is-locked .sidebar-scrim,
+.app-shell.is-locked .topbar {
+  display: none;
+}
+
+.app-shell.is-locked .main-column {
+  margin-left: 0;
+}
+
+.login-screen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background:
+    radial-gradient(circle at 15% 10%, rgba(47, 143, 82, 0.09), transparent 45%),
+    radial-gradient(circle at 85% 90%, rgba(207, 138, 31, 0.1), transparent 45%),
+    var(--paper);
+}
+
+.login-card {
+  width: 100%;
+  max-width: 380px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-pop);
+  padding: 2.2rem 2rem 2rem;
+}
+
+.login-card__brand {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  margin-bottom: 0.4rem;
+}
+
+.login-card__brand-name {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 1.2rem;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.login-card__hint {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  margin: 0 0 1.5rem;
+}
+
+.login-card .field {
+  margin-bottom: 1rem;
 }
 
 /* ── Buttons ───────────────────────────────────────────────────────── */
@@ -752,6 +833,8 @@ svg {
 .status--cancelada { color: var(--danger); background: var(--danger-soft); }
 .status--ativo { color: var(--success); background: var(--success-soft); }
 .status--inativo { color: var(--text-muted); background: var(--line); }
+.status--admin { color: var(--amber-deep); background: var(--amber-soft); }
+.status--caixa { color: var(--text-muted); background: var(--line); }
 
 /* ── Empty state ───────────────────────────────────────────────────── */
 

@@ -2,7 +2,9 @@
 // (toast, modal, confirmação, formatação). Cada módulo de tela expõe
 // `render(view)` e monta seu próprio HTML dentro do container recebido.
 
-export const APP_BUILD = "2026-07-11 21:00 -03";
+import { initAuth, isLoggedIn, isAdmin, getCurrentUsuario, signOut, onAuthChange } from "./auth.js";
+
+export const APP_BUILD = "2026-07-11 22:45 -03";
 
 const ROUTES = {
   home: {
@@ -35,6 +37,12 @@ const ROUTES = {
     title: "Visão geral",
     load: () => import("./relatorios.js"),
   },
+  usuarios: {
+    breadcrumb: "Administração",
+    title: "Usuários",
+    load: () => import("./usuarios.js"),
+    adminOnly: true,
+  },
 };
 
 const DEFAULT_ROUTE = "home";
@@ -44,10 +52,58 @@ const breadcrumbEl = document.getElementById("breadcrumb");
 const titleEl = document.getElementById("page-title");
 const topbarActionsEl = document.getElementById("topbar-actions");
 const navLinks = Array.from(document.querySelectorAll(".nav-link"));
+const navUsuarios = document.getElementById("nav-usuarios");
+const userChipAvatar = document.getElementById("user-chip-avatar");
+const userChipName = document.getElementById("user-chip-name");
+const userChipMeta = document.getElementById("user-chip-meta");
+const logoutBtn = document.getElementById("logout-btn");
+
+function initials(nome) {
+  const parts = String(nome || "").trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "–";
+  return (parts[0][0] + (parts[1]?.[0] || "")).toUpperCase();
+}
+
+function updateAuthUI() {
+  const usuario = getCurrentUsuario();
+  const logged = isLoggedIn();
+
+  appShell.classList.toggle("is-locked", !logged);
+  navUsuarios.hidden = !isAdmin();
+
+  if (usuario) {
+    userChipAvatar.textContent = initials(usuario.nome);
+    userChipName.textContent = usuario.nome;
+    userChipMeta.textContent = usuario.role === "admin" ? "Administrador" : "Caixa";
+  } else {
+    userChipAvatar.textContent = "–";
+    userChipName.textContent = "—";
+    userChipMeta.textContent = "—";
+  }
+}
+
+logoutBtn.addEventListener("click", async () => {
+  await signOut();
+});
 
 async function renderRoute() {
+  if (!isLoggedIn()) {
+    stopAutoRefresh();
+    breadcrumbEl.textContent = "";
+    titleEl.textContent = "Entrar";
+    topbarActionsEl.innerHTML = "";
+    closeNavDrawer();
+    const mod = await import("./login.js");
+    mod.render(viewEl);
+    return;
+  }
+
   const hash = window.location.hash.replace(/^#\//, "").split("?")[0];
-  const routeKey = ROUTES[hash] ? hash : DEFAULT_ROUTE;
+  let routeKey = ROUTES[hash] ? hash : DEFAULT_ROUTE;
+  if (ROUTES[routeKey].adminOnly && !isAdmin()) {
+    routeKey = DEFAULT_ROUTE;
+    window.location.hash = `#/${DEFAULT_ROUTE}`;
+  }
   const route = ROUTES[routeKey];
 
   navLinks.forEach((link) => {
@@ -81,7 +137,18 @@ async function renderRoute() {
 }
 
 window.addEventListener("hashchange", renderRoute);
-window.addEventListener("DOMContentLoaded", renderRoute);
+
+async function boot() {
+  await initAuth();
+  onAuthChange(() => {
+    updateAuthUI();
+    renderRoute();
+  });
+  updateAuthUI();
+  renderRoute();
+}
+
+window.addEventListener("DOMContentLoaded", boot);
 
 // ── Menu responsivo (drawer + scrim) ───────────────────────────────
 
