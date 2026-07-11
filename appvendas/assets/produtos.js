@@ -26,7 +26,7 @@ export async function render(view, actionsEl) {
         align: "right",
         render: (row) => {
           const low = row.estoque <= row.estoque_minimo;
-          return `<span style="${low ? "color: var(--red); font-weight: 600;" : ""}">${row.estoque}</span>`;
+          return `<span style="${low ? "color: var(--danger); font-weight: 700;" : ""}">${row.estoque}</span>`;
         },
       },
       { key: "fornecedor", label: "Fornecedor", render: (row) => escapeHtml(row.fornecedor?.nome || "—") },
@@ -44,7 +44,7 @@ export async function render(view, actionsEl) {
       { key: "custo", label: "Custo", type: "number", step: "0.01", default: 0 },
       { key: "estoque", label: "Estoque atual", type: "number", step: "1", required: true, default: 0 },
       { key: "estoque_minimo", label: "Estoque mínimo", type: "number", step: "1", default: 0 },
-      { key: "fornecedor_id", label: "Fornecedor", type: "select", optionsLoader: loadFornecedorOptions },
+      { key: "fornecedor_id", label: "Fornecedor", type: "search-select", optionsLoader: loadFornecedorOptions },
       { key: "descricao", label: "Descrição", type: "textarea", full: true },
       { key: "ativo", label: "Produto ativo", type: "checkbox", default: true, full: true },
     ],

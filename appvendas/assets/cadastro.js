@@ -1,37 +1,52 @@
-// Motor genérico de tela de cadastro (listar + buscar + criar/editar + excluir).
-// Clientes, Produtos e Fornecedores compartilham exatamente este fluxo —
-// só mudam os campos e colunas — então fica configurado por tela em vez de
-// triplicado.
+// Motor genérico de tela de cadastro (listar + buscar + ordenar + criar/editar
+// + excluir). Clientes, Produtos e Fornecedores compartilham exatamente este
+// fluxo — só mudam os campos e colunas — então fica configurado por tela em
+// vez de triplicado.
 
 import { supabase } from "./supabaseClient.js";
-import { showToast, openModal, closeModal, confirmDialog, escapeHtml } from "./app.js";
+import { showToast, openModal, closeModal, confirmDialog, escapeHtml, skeletonTable, createSearchSelect, registerAutoRefresh } from "./app.js";
+
+const SEARCH_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>';
 
 export async function renderCadastro(view, actionsEl, config) {
   actionsEl.innerHTML = `<button type="button" class="btn btn--primary" id="btn-new">+ Novo ${escapeHtml(config.titleSingular)}</button>`;
   view.innerHTML = `
     <div class="toolbar">
-      <input type="search" class="input search-input" id="search-input" placeholder="${escapeHtml(config.searchPlaceholder)}" />
+      <div class="search-input-wrap">
+        ${SEARCH_ICON}
+        <input type="search" class="input" id="search-input" placeholder="${escapeHtml(config.searchPlaceholder)}" />
+      </div>
+      <p class="record-count" id="record-count"></p>
     </div>
-    <div class="card">
-      <div class="table-wrap" id="table-wrap"><div class="empty-state">Carregando…</div></div>
-    </div>
+    ${skeletonTable()}
   `;
 
-  const tableWrap = view.querySelector("#table-wrap");
   const searchInput = view.querySelector("#search-input");
-  actionsEl.querySelector("#btn-new").addEventListener("click", () => openForm(config, null));
+  const state = { key: config.orderBy || "nome", asc: true };
+
+  actionsEl.querySelector("#btn-new").addEventListener("click", () => openForm(config, null, () => loadRows(config, view, searchInput.value.trim(), state)));
 
   let searchTimer = null;
   searchInput.addEventListener("input", () => {
     clearTimeout(searchTimer);
-    searchTimer = setTimeout(() => loadRows(config, tableWrap, searchInput.value.trim()), 250);
+    searchTimer = setTimeout(() => loadRows(config, view, searchInput.value.trim(), state), 250);
   });
 
-  await loadRows(config, tableWrap, "");
+  await loadRows(config, view, "", state);
+
+  registerAutoRefresh(() => loadRows(config, view, searchInput.value.trim(), state, { silent: true }), 15000);
 }
 
-async function loadRows(config, tableWrap, term) {
-  tableWrap.innerHTML = '<div class="empty-state">Carregando…</div>';
+async function loadRows(config, view, term, state, opts = {}) {
+  const { silent = false } = opts;
+  const countEl = view.querySelector("#record-count");
+  const existingCard = view.querySelector(".card");
+
+  if (!silent || !existingCard) {
+    existingCard?.remove();
+    view.insertAdjacentHTML("beforeend", skeletonTable());
+    if (countEl) countEl.textContent = "";
+  }
 
   let query = supabase.from(config.table).select(config.selectQuery || "*");
 
@@ -40,50 +55,96 @@ async function loadRows(config, tableWrap, term) {
     query = query.or(orFilter);
   }
 
-  query = query.order(config.orderBy || "nome", { ascending: true });
-
   const { data, error } = await query;
+  const card = view.querySelector(".card");
 
   if (error) {
-    tableWrap.innerHTML = `<div class="empty-state"><p class="empty-state__title">Erro ao carregar</p><p class="empty-state__hint">${escapeHtml(error.message)}</p></div>`;
+    card.innerHTML = `<div class="empty-state"><p class="empty-state__title">Erro ao carregar</p><p class="empty-state__hint">${escapeHtml(error.message)}</p></div>`;
     return;
   }
 
   if (!data || data.length === 0) {
-    tableWrap.innerHTML = `<div class="empty-state"><p class="empty-state__title">Nenhum registro encontrado</p><p class="empty-state__hint">Use "+ Novo ${escapeHtml(config.titleSingular)}" para cadastrar o primeiro.</p></div>`;
+    card.innerHTML = `<div class="empty-state"><p class="empty-state__title">Nenhum registro encontrado</p><p class="empty-state__hint">Use "+ Novo ${escapeHtml(config.titleSingular)}" para cadastrar o primeiro.</p></div>`;
     return;
   }
 
-  const rows = data.map((row) => `
+  if (countEl) countEl.textContent = `${data.length} registro${data.length === 1 ? "" : "s"}`;
+
+  renderTable(config, view, card, data, state);
+}
+
+function sortData(data, config, state) {
+  const col = config.columns.find((c) => c.key === state.key);
+  const dir = state.asc ? 1 : -1;
+  return [...data].sort((a, b) => {
+    const va = col?.sortValue ? col.sortValue(a) : a[state.key];
+    const vb = col?.sortValue ? col.sortValue(b) : b[state.key];
+    if (va == null && vb == null) return 0;
+    if (va == null) return -1 * dir;
+    if (vb == null) return 1 * dir;
+    if (typeof va === "number" && typeof vb === "number") return (va - vb) * dir;
+    return String(va).localeCompare(String(vb), "pt-BR") * dir;
+  });
+}
+
+function renderTable(config, view, card, data, state) {
+  const sorted = sortData(data, config, state);
+
+  const rows = sorted.map((row) => {
+    const railColor = "ativo" in row ? `var(${row.ativo ? "--success" : "--text-muted"})` : "transparent";
+    return `
     <tr>
-      ${config.columns.map((col) => `<td class="${col.align === "right" ? "cell-num" : ""}">${col.render ? col.render(row) : escapeHtml(row[col.key] ?? "—")}</td>`).join("")}
+      ${config.columns.map((col, idx) => {
+        const classes = [col.align === "right" ? "cell-num" : "", idx === 0 ? "cell-rail" : ""].filter(Boolean).join(" ");
+        const style = idx === 0 ? ` style="--rail-color:${railColor}"` : "";
+        return `<td class="${classes}"${style}>${col.render ? col.render(row) : escapeHtml(row[col.key] ?? "—")}</td>`;
+      }).join("")}
       <td class="cell-actions">
         <button type="button" class="btn btn--ghost btn--sm" data-edit="${row.id}">Editar</button>
         <button type="button" class="btn btn--danger btn--sm" data-delete="${row.id}">Excluir</button>
       </td>
     </tr>
-  `).join("");
+  `;
+  }).join("");
 
-  tableWrap.innerHTML = `
-    <table class="data-table">
-      <thead>
-        <tr>
-          ${config.columns.map((col) => `<th ${col.align === "right" ? 'style="text-align:right"' : ""}>${escapeHtml(col.label)}</th>`).join("")}
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>${rows}</tbody>
-    </table>
+  card.innerHTML = `
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            ${config.columns.map((col) => `
+              <th ${col.align === "right" ? 'style="text-align:right"' : ""}>
+                <button type="button" class="th-sort ${state.key === col.key ? "is-active" : ""}" data-sort="${col.key}">
+                  ${escapeHtml(col.label)}
+                  <span class="th-sort__caret">${state.key === col.key ? (state.asc ? "▲" : "▼") : "↕"}</span>
+                </button>
+              </th>
+            `).join("")}
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
   `;
 
-  tableWrap.querySelectorAll("[data-edit]").forEach((btn) => {
+  card.querySelectorAll("[data-sort]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      const row = data.find((r) => r.id === btn.dataset.edit);
-      openForm(config, row, () => loadRows(config, tableWrap, ""));
+      const key = btn.dataset.sort;
+      state.asc = state.key === key ? !state.asc : true;
+      state.key = key;
+      renderTable(config, view, card, data, state);
     });
   });
 
-  tableWrap.querySelectorAll("[data-delete]").forEach((btn) => {
+  card.querySelectorAll("[data-edit]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const row = data.find((r) => r.id === btn.dataset.edit);
+      openForm(config, row, () => loadRows(config, view, view.querySelector("#search-input").value.trim(), state));
+    });
+  });
+
+  card.querySelectorAll("[data-delete]").forEach((btn) => {
     btn.addEventListener("click", async () => {
       const ok = await confirmDialog(`Excluir este ${config.titleSingular.toLowerCase()}? Esta ação não pode ser desfeita.`, { confirmLabel: "Excluir" });
       if (!ok) return;
@@ -96,7 +157,7 @@ async function loadRows(config, tableWrap, term) {
         return;
       }
       showToast(`${config.titleSingular} excluído.`);
-      loadRows(config, tableWrap, "");
+      loadRows(config, view, view.querySelector("#search-input").value.trim(), state);
     });
   });
 }
@@ -107,7 +168,7 @@ async function openForm(config, existingRow, onSaved) {
 
   const optionsByField = {};
   for (const field of config.fields) {
-    if (field.type === "select" && field.optionsLoader) {
+    if ((field.type === "select" || field.type === "search-select") && field.optionsLoader) {
       optionsByField[field.key] = await field.optionsLoader();
     }
   }
@@ -125,13 +186,38 @@ async function openForm(config, existingRow, onSaved) {
     </form>
   `;
 
+  const searchSelects = {};
+  for (const field of config.fields) {
+    if (field.type !== "search-select") continue;
+    const mount = body.querySelector(`[data-search-select="${field.key}"]`);
+    searchSelects[field.key] = createSearchSelect({
+      container: mount,
+      placeholder: field.placeholder || `Buscar ${field.label.toLowerCase()}…`,
+      options: optionsByField[field.key] || [],
+      value: existingRow ? existingRow[field.key] : (field.default ?? null),
+      allowClear: !field.required,
+    });
+  }
+
   body.querySelector("#btn-cancel").addEventListener("click", closeModal);
 
   body.querySelector("#cadastro-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const form = e.target;
     const payload = {};
+    const errorEl = form.querySelector("#form-error");
+    errorEl.innerHTML = "";
+
     for (const field of config.fields) {
+      if (field.type === "search-select") {
+        const value = searchSelects[field.key].getValue();
+        if (field.required && !value) {
+          errorEl.innerHTML = `<div class="form-error">Selecione um valor para "${escapeHtml(field.label)}".</div>`;
+          return;
+        }
+        payload[field.key] = value;
+        continue;
+      }
       const input = form.elements[field.key];
       if (field.type === "checkbox") {
         payload[field.key] = input.checked;
@@ -141,9 +227,6 @@ async function openForm(config, existingRow, onSaved) {
         payload[field.key] = input.value === "" ? null : input.value;
       }
     }
-
-    const errorEl = form.querySelector("#form-error");
-    errorEl.innerHTML = "";
 
     const query = isEdit
       ? supabase.from(config.table).update(payload).eq("id", existingRow.id)
@@ -159,7 +242,6 @@ async function openForm(config, existingRow, onSaved) {
     showToast(`${config.titleSingular} ${isEdit ? "atualizado" : "cadastrado"}.`);
     closeModal();
     if (onSaved) onSaved();
-    else document.dispatchEvent(new CustomEvent("cadastro:saved"));
   });
 }
 
@@ -167,6 +249,7 @@ function renderField(field, existingRow, options) {
   const value = existingRow ? existingRow[field.key] : field.default;
   const wrapClass = field.full ? "field field--full" : "field";
   const required = field.required ? "required" : "";
+  const requiredMark = field.required ? '<span class="field-required">*</span>' : "";
 
   if (field.type === "checkbox") {
     const checked = existingRow ? Boolean(value) : field.default !== false;
@@ -177,10 +260,19 @@ function renderField(field, existingRow, options) {
     `;
   }
 
+  if (field.type === "search-select") {
+    return `
+      <div class="${wrapClass}">
+        <label>${escapeHtml(field.label)}${requiredMark}</label>
+        <div data-search-select="${field.key}"></div>
+      </div>
+    `;
+  }
+
   if (field.type === "select") {
     return `
       <div class="${wrapClass}">
-        <label for="f-${field.key}">${escapeHtml(field.label)}</label>
+        <label for="f-${field.key}">${escapeHtml(field.label)}${requiredMark}</label>
         <select class="input" id="f-${field.key}" name="${field.key}" ${required}>
           <option value="">—</option>
           ${(options || []).map((opt) => `<option value="${escapeHtml(opt.value)}" ${String(value) === String(opt.value) ? "selected" : ""}>${escapeHtml(opt.label)}</option>`).join("")}
@@ -192,7 +284,7 @@ function renderField(field, existingRow, options) {
   if (field.type === "textarea") {
     return `
       <div class="${wrapClass}">
-        <label for="f-${field.key}">${escapeHtml(field.label)}</label>
+        <label for="f-${field.key}">${escapeHtml(field.label)}${requiredMark}</label>
         <textarea class="input" id="f-${field.key}" name="${field.key}" rows="3" ${required}>${escapeHtml(value ?? "")}</textarea>
       </div>
     `;
@@ -200,7 +292,7 @@ function renderField(field, existingRow, options) {
 
   return `
     <div class="${wrapClass}">
-      <label for="f-${field.key}">${escapeHtml(field.label)}</label>
+      <label for="f-${field.key}">${escapeHtml(field.label)}${requiredMark}</label>
       <input class="input" type="${field.type || "text"}" id="f-${field.key}" name="${field.key}" step="${field.step || ""}" value="${escapeHtml(value ?? "")}" ${required} />
     </div>
   `;

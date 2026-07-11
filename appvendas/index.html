@@ -6,47 +6,77 @@
   <title>AppVendas</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./assets/styles.css?v=1" />
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./assets/styles.css?v=3" />
 </head>
 <body>
-  <div class="app-shell">
-    <aside class="sidebar">
+  <div class="app-shell" id="app-shell">
+    <div class="sidebar-scrim" id="sidebar-scrim"></div>
+
+    <aside class="sidebar" id="sidebar">
       <div class="sidebar__brand">
         <span class="sidebar__brand-mark">AV</span>
         <span class="sidebar__brand-name">AppVendas</span>
+        <button type="button" class="sidebar__close" id="sidebar-close" aria-label="Fechar menu">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="M6 6l12 12"/></svg>
+        </button>
       </div>
 
       <nav class="sidebar__nav" aria-label="Navegação principal">
         <div class="nav-group">
           <p class="nav-group__title">Cadastros</p>
-          <a class="nav-link" href="#/clientes" data-route="clientes">Clientes</a>
-          <a class="nav-link" href="#/produtos" data-route="produtos">Produtos</a>
-          <a class="nav-link" href="#/fornecedores" data-route="fornecedores">Fornecedores</a>
+          <a class="nav-link" href="#/clientes" data-route="clientes">
+            <svg class="nav-link__icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <span>Clientes</span>
+          </a>
+          <a class="nav-link" href="#/produtos" data-route="produtos">
+            <svg class="nav-link__icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4a2 2 0 0 0 1-1.73Z"/><path d="M3.29 7 12 12l8.71-5"/><path d="M12 22V12"/></svg>
+            <span>Produtos</span>
+          </a>
+          <a class="nav-link" href="#/fornecedores" data-route="fornecedores">
+            <svg class="nav-link__icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/></svg>
+            <span>Fornecedores</span>
+          </a>
         </div>
 
         <div class="nav-group">
           <p class="nav-group__title">Vendas</p>
-          <a class="nav-link" href="#/vendas" data-route="vendas">Movimentação de Vendas</a>
+          <a class="nav-link" href="#/vendas" data-route="vendas">
+            <svg class="nav-link__icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M8 7h8"/><path d="M8 11h8"/><path d="M8 15h5"/></svg>
+            <span>Movimentação de Vendas</span>
+          </a>
         </div>
 
         <div class="nav-group">
           <p class="nav-group__title">Relatórios</p>
-          <a class="nav-link" href="#/relatorios" data-route="relatorios">Visão geral</a>
+          <a class="nav-link" href="#/relatorios" data-route="relatorios">
+            <svg class="nav-link__icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
+            <span>Visão geral</span>
+          </a>
         </div>
       </nav>
 
       <div class="sidebar__footer">
-        <p class="sidebar__footer-label">Ambiente</p>
-        <p class="sidebar__footer-value">Piloto interno</p>
+        <div class="user-chip">
+          <span class="user-chip__avatar">RS</span>
+          <div>
+            <p class="user-chip__name">Equipe comercial</p>
+            <p class="user-chip__meta">Piloto interno</p>
+          </div>
+        </div>
       </div>
     </aside>
 
     <div class="main-column">
       <header class="topbar">
-        <div>
-          <p class="topbar__breadcrumb" id="breadcrumb">Cadastros</p>
-          <h1 class="topbar__title" id="page-title">Clientes</h1>
+        <div class="topbar__heading">
+          <button type="button" class="menu-toggle" id="menu-toggle" aria-label="Abrir menu">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h16"/><path d="M4 6h16"/><path d="M4 18h16"/></svg>
+          </button>
+          <div>
+            <p class="topbar__breadcrumb" id="breadcrumb">Cadastros</p>
+            <h1 class="topbar__title" id="page-title">Clientes</h1>
+          </div>
         </div>
         <div class="topbar__actions" id="topbar-actions"></div>
       </header>
@@ -67,6 +97,6 @@
 
   <div class="toast-stack" id="toast-stack" aria-live="assertive"></div>
 
-  <script type="module" src="./assets/app.js?v=1"></script>
+  <script type="module" src="./assets/app.js?v=3"></script>
 </body>
 </html>

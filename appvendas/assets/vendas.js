@@ -1,5 +1,7 @@
 import { supabase } from "./supabaseClient.js";
-import { showToast, openModal, confirmDialog, formatCurrency, formatDate, formatDateTime, escapeHtml } from "./app.js";
+import { showToast, openModal, confirmDialog, formatCurrency, formatDate, formatDateTime, escapeHtml, createSearchSelect, registerAutoRefresh } from "./app.js";
+
+const FORMAS_PAGAMENTO = ["Dinheiro", "Pix", "Cartão de crédito", "Cartão de débito", "Boleto"];
 
 let clientesOptions = [];
 let produtosOptions = [];
@@ -39,13 +41,25 @@ export async function render(view, actionsEl) {
 }
 
 async function loadClientes() {
-  const { data } = await supabase.from("clientes").select("id, nome").eq("ativo", true).order("nome", { ascending: true });
+  const { data } = await supabase.from("clientes").select("id, nome, documento").eq("ativo", true).order("nome", { ascending: true });
   return data || [];
 }
 
 async function loadProdutos() {
-  const { data } = await supabase.from("produtos").select("id, nome, preco, estoque").eq("ativo", true).order("nome", { ascending: true });
+  const { data } = await supabase.from("produtos").select("id, nome, sku, preco, estoque").eq("ativo", true).order("nome", { ascending: true });
   return data || [];
+}
+
+function clienteSearchOptions() {
+  return clientesOptions.map((c) => ({ value: c.id, label: c.nome, meta: c.documento || "" }));
+}
+
+function produtoSearchOptions() {
+  return produtosOptions.map((p) => ({
+    value: p.id,
+    label: p.nome,
+    meta: `${formatCurrency(p.preco)} · estoque ${p.estoque}`,
+  }));
 }
 
 function renderNovaVenda(content) {
@@ -55,25 +69,20 @@ function renderNovaVenda(content) {
         <p class="section-title">Dados da venda</p>
         <div class="form-grid">
           <div class="field field--full">
-            <label for="v-cliente">Cliente</label>
-            <select class="input" id="v-cliente">
-              <option value="">— Sem cliente identificado —</option>
-              ${clientesOptions.map((c) => `<option value="${c.id}">${escapeHtml(c.nome)}</option>`).join("")}
-            </select>
+            <label>Cliente</label>
+            <div data-mount="v-cliente"></div>
           </div>
           <div class="field">
             <label for="v-data">Data</label>
             <input class="input" type="date" id="v-data" value="${new Date().toISOString().slice(0, 10)}" />
           </div>
           <div class="field">
-            <label for="v-forma">Forma de pagamento</label>
-            <select class="input" id="v-forma">
-              <option value="Dinheiro">Dinheiro</option>
-              <option value="Pix">Pix</option>
-              <option value="Cartão de crédito">Cartão de crédito</option>
-              <option value="Cartão de débito">Cartão de débito</option>
-              <option value="Boleto">Boleto</option>
-            </select>
+            <label>Forma de pagamento</label>
+            <div class="segmented" id="v-forma" role="radiogroup" aria-label="Forma de pagamento">
+              ${FORMAS_PAGAMENTO.map((forma, idx) => `
+                <button type="button" class="segmented__btn ${idx === 0 ? "is-active" : ""}" data-value="${escapeHtml(forma)}" role="radio" aria-checked="${idx === 0}">${escapeHtml(forma)}</button>
+              `).join("")}
+            </div>
           </div>
           <div class="field field--full">
             <label for="v-obs">Observações</label>
@@ -84,17 +93,15 @@ function renderNovaVenda(content) {
         <p class="section-title" style="margin-top: 1.5rem;">Itens</p>
         <div class="form-grid" style="grid-template-columns: 2fr 1fr auto; align-items: end;">
           <div class="field">
-            <label for="v-produto">Produto</label>
-            <select class="input" id="v-produto">
-              ${produtosOptions.map((p) => `<option value="${p.id}">${escapeHtml(p.nome)} — ${formatCurrency(p.preco)} (estoque: ${p.estoque})</option>`).join("")}
-            </select>
+            <label>Produto</label>
+            <div data-mount="v-produto"></div>
           </div>
           <div class="field">
             <label for="v-qtd">Quantidade</label>
             <input class="input" type="number" id="v-qtd" min="1" step="1" value="1" />
           </div>
           <div class="field">
-            <button type="button" class="btn btn--ghost" id="v-add-item">Adicionar</button>
+            <button type="button" class="btn btn--ghost" id="v-add-item">+ Adicionar</button>
           </div>
         </div>
 
@@ -125,6 +132,33 @@ function renderNovaVenda(content) {
 
   const cartBody = content.querySelector("#cart-table tbody");
   const descontoInput = content.querySelector("#v-desconto");
+  const formaGroup = content.querySelector("#v-forma");
+  let formaPagamento = FORMAS_PAGAMENTO[0];
+
+  formaGroup.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-value]");
+    if (!btn) return;
+    formaPagamento = btn.dataset.value;
+    formaGroup.querySelectorAll(".segmented__btn").forEach((b) => {
+      const active = b === btn;
+      b.classList.toggle("is-active", active);
+      b.setAttribute("aria-checked", String(active));
+    });
+  });
+
+  const clienteSelect = createSearchSelect({
+    container: content.querySelector('[data-mount="v-cliente"]'),
+    placeholder: "Buscar cliente por nome ou documento… (opcional)",
+    options: clienteSearchOptions(),
+    allowClear: true,
+  });
+
+  const produtoSelect = createSearchSelect({
+    container: content.querySelector('[data-mount="v-produto"]'),
+    placeholder: "Buscar produto por nome ou SKU…",
+    options: produtoSearchOptions(),
+    allowClear: true,
+  });
 
   function renderCart() {
     if (cart.length === 0) {
@@ -158,10 +192,11 @@ function renderNovaVenda(content) {
 
   descontoInput.addEventListener("input", updateTotals);
 
-  content.querySelector("#v-add-item").addEventListener("click", () => {
-    const produtoSelect = content.querySelector("#v-produto");
-    const qtdInput = content.querySelector("#v-qtd");
-    const produto = produtosOptions.find((p) => p.id === produtoSelect.value);
+  const qtdInput = content.querySelector("#v-qtd");
+
+  function addItem() {
+    const produtoId = produtoSelect.getValue();
+    const produto = produtosOptions.find((p) => p.id === produtoId);
     const quantidade = Number(qtdInput.value || 0);
 
     if (!produto || quantidade <= 0) return;
@@ -171,7 +206,17 @@ function renderNovaVenda(content) {
     else cart.push({ produto_id: produto.id, nome: produto.nome, quantidade, preco_unitario: produto.preco });
 
     qtdInput.value = 1;
+    produtoSelect.reset();
+    produtoSelect.focusInput();
     renderCart();
+  }
+
+  content.querySelector("#v-add-item").addEventListener("click", addItem);
+  qtdInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      addItem();
+    }
   });
 
   content.querySelector("#v-finalizar").addEventListener("click", async () => {
@@ -184,9 +229,9 @@ function renderNovaVenda(content) {
     }
 
     const payload = {
-      p_cliente_id: content.querySelector("#v-cliente").value || null,
+      p_cliente_id: clienteSelect.getValue() || null,
       p_data_venda: content.querySelector("#v-data").value || null,
-      p_forma_pagamento: content.querySelector("#v-forma").value,
+      p_forma_pagamento: formaPagamento,
       p_observacoes: content.querySelector("#v-obs").value || null,
       p_desconto: Number(descontoInput.value || 0),
       p_itens: cart.map((item) => ({ produto_id: item.produto_id, quantidade: item.quantidade, preco_unitario: item.preco_unitario })),
@@ -206,11 +251,30 @@ function renderNovaVenda(content) {
   });
 
   renderCart();
+
+  // Atualiza silenciosamente os catálogos de cliente/produto (estoque, novos
+  // cadastros) sem perder o carrinho em andamento nem fechar os campos de busca.
+  registerAutoRefresh(async () => {
+    const [nextClientes, nextProdutos] = await Promise.all([loadClientes(), loadProdutos()]);
+    clientesOptions = nextClientes;
+    produtosOptions = nextProdutos;
+    clienteSelect.setOptions(clienteSearchOptions());
+    produtoSelect.setOptions(produtoSearchOptions());
+  }, 15000);
 }
 
 async function renderHistorico(content) {
-  content.innerHTML = `<div class="card"><div class="table-wrap" id="vendas-table"><div class="empty-state">Carregando…</div></div></div>`;
+  content.innerHTML = `<div class="card"><div class="table-wrap" id="vendas-table">${'<div class="empty-state">Carregando…</div>'}</div></div>`;
   const tableWrap = content.querySelector("#vendas-table");
+
+  await loadHistorico(tableWrap);
+
+  registerAutoRefresh(() => loadHistorico(content.querySelector("#vendas-table"), { silent: true }), 15000);
+}
+
+async function loadHistorico(tableWrap, opts = {}) {
+  const { silent = false } = opts;
+  if (!silent) tableWrap.innerHTML = `<div class="empty-state">Carregando…</div>`;
 
   const { data, error } = await supabase
     .from("vendas")
@@ -266,7 +330,7 @@ async function renderHistorico(content) {
         return;
       }
       showToast("Venda cancelada e estoque devolvido.");
-      renderHistorico(content);
+      loadHistorico(tableWrap);
     });
   });
 }

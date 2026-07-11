@@ -1,9 +1,15 @@
 import { supabase } from "./supabaseClient.js";
-import { formatCurrency, formatDate, escapeHtml } from "./app.js";
+import { formatCurrency, formatDate, escapeHtml, registerAutoRefresh } from "./app.js";
 
 export async function render(view, actionsEl) {
   actionsEl.innerHTML = "";
-  view.innerHTML = `<div class="empty-state">Carregando relatórios…</div>`;
+  await load(view);
+  registerAutoRefresh(() => load(view, { silent: true }), 20000);
+}
+
+async function load(view, opts = {}) {
+  const { silent = false } = opts;
+  if (!silent) view.innerHTML = `<div class="empty-state">Carregando relatórios…</div>`;
 
   const [vendasRes, produtosRes, itensRes] = await Promise.all([
     supabase.from("vendas").select("id, total, status, data_venda, cliente_id, cliente:clientes(nome)"),
@@ -37,10 +43,10 @@ export async function render(view, actionsEl) {
 
   view.innerHTML = `
     <div class="stat-grid">
-      ${statCard("Vendas confirmadas", vendasConfirmadas.length)}
-      ${statCard("Faturamento total", formatCurrency(faturamento))}
-      ${statCard("Ticket médio", formatCurrency(ticketMedio))}
-      ${statCard("Produtos com estoque baixo", estoqueBaixo.length)}
+      ${statCard("Vendas confirmadas", vendasConfirmadas.length, "var(--accent)")}
+      ${statCard("Faturamento total", formatCurrency(faturamento), "var(--accent-deep)")}
+      ${statCard("Ticket médio", formatCurrency(ticketMedio), "var(--amber)")}
+      ${statCard("Produtos com estoque baixo", estoqueBaixo.length, "var(--danger)")}
     </div>
 
     <div class="report-grid">
@@ -61,7 +67,7 @@ export async function render(view, actionsEl) {
         : `<div class="table-wrap"><table class="data-table">
             <thead><tr><th>Produto</th><th style="text-align:right">Estoque</th><th style="text-align:right">Mínimo</th></tr></thead>
             <tbody>
-              ${estoqueBaixo.map((p) => `<tr><td>${escapeHtml(p.nome)}</td><td class="cell-num" style="color: var(--red); font-weight:600;">${p.estoque}</td><td class="cell-num">${p.estoque_minimo}</td></tr>`).join("")}
+              ${estoqueBaixo.map((p) => `<tr><td>${escapeHtml(p.nome)}</td><td class="cell-num" style="color: var(--danger); font-weight:700;">${p.estoque}</td><td class="cell-num">${p.estoque_minimo}</td></tr>`).join("")}
             </tbody>
           </table></div>`
       }
@@ -87,9 +93,9 @@ function aggregate(rows, keyFn, labelFn, valueFn) {
   return Array.from(map.values()).sort((a, b) => b.total - a.total).slice(0, 5);
 }
 
-function statCard(label, value) {
+function statCard(label, value, tagColor) {
   return `
-    <div class="card stat-card">
+    <div class="card stat-card" style="--tag-color:${tagColor}">
       <p class="stat-card__label">${escapeHtml(label)}</p>
       <p class="stat-card__value">${value}</p>
     </div>
