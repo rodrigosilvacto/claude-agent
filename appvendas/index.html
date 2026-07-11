@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AppVendas</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./assets/styles.css?v=1" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="sidebar__brand">
+        <span class="sidebar__brand-mark">AV</span>
+        <span class="sidebar__brand-name">AppVendas</span>
+      </div>
+
+      <nav class="sidebar__nav" aria-label="Navegação principal">
+        <div class="nav-group">
+          <p class="nav-group__title">Cadastros</p>
+          <a class="nav-link" href="#/clientes" data-route="clientes">Clientes</a>
+          <a class="nav-link" href="#/produtos" data-route="produtos">Produtos</a>
+          <a class="nav-link" href="#/fornecedores" data-route="fornecedores">Fornecedores</a>
+        </div>
+
+        <div class="nav-group">
+          <p class="nav-group__title">Vendas</p>
+          <a class="nav-link" href="#/vendas" data-route="vendas">Movimentação de Vendas</a>
+        </div>
+
+        <div class="nav-group">
+          <p class="nav-group__title">Relatórios</p>
+          <a class="nav-link" href="#/relatorios" data-route="relatorios">Visão geral</a>
+        </div>
+      </nav>
+
+      <div class="sidebar__footer">
+        <p class="sidebar__footer-label">Ambiente</p>
+        <p class="sidebar__footer-value">Piloto interno</p>
+      </div>
+    </aside>
+
+    <div class="main-column">
+      <header class="topbar">
+        <div>
+          <p class="topbar__breadcrumb" id="breadcrumb">Cadastros</p>
+          <h1 class="topbar__title" id="page-title">Clientes</h1>
+        </div>
+        <div class="topbar__actions" id="topbar-actions"></div>
+      </header>
+
+      <main class="view" id="view" aria-live="polite"></main>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="modal-overlay" hidden>
+    <div class="modal" role="dialog" aria-modal="true" id="modal">
+      <div class="modal__header">
+        <h2 id="modal-title"></h2>
+        <button type="button" class="icon-btn" id="modal-close" aria-label="Fechar">&times;</button>
+      </div>
+      <div class="modal__body" id="modal-body"></div>
+    </div>
+  </div>
+
+  <div class="toast-stack" id="toast-stack" aria-live="assertive"></div>
+
+  <script type="module" src="./assets/app.js?v=1"></script>
+</body>
+</html>

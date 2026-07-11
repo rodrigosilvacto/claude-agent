@@ -83,6 +83,37 @@ desabilitado**, ver abaixo.
 3. Magic link (Email OTP) no Supabase Auth pode continuar habilitado sem
    problema — o painel simplesmente não exige mais uma sessão para funcionar.
 
+## AppVendas (`/appvendas`)
+
+Aplicação corporativa de gestão de vendas: menu lateral com **Cadastros**
+(Clientes, Produtos, Fornecedores), **Vendas** (Movimentação de Vendas) e
+**Relatórios**. Mesmo padrão do resto do repo: HTML/JS estático + Supabase,
+sem build, no projeto `ClaudeProjects`.
+
+- `appvendas/index.html` — shell com sidebar, roteamento por hash
+  (`#/clientes`, `#/produtos`, `#/fornecedores`, `#/vendas`, `#/relatorios`).
+- `appvendas/assets/cadastro.js` — motor genérico de CRUD (listar, buscar,
+  criar/editar via modal, excluir) reaproveitado por `clientes.js`,
+  `produtos.js` e `fornecedores.js`, que só configuram campos e colunas.
+- `appvendas/assets/vendas.js` — tela de "Movimentação de Vendas": monta o
+  carrinho (produto + quantidade), finaliza a venda via RPC `criar_venda`
+  e lista o histórico com detalhe (recibo) e cancelamento (RPC
+  `cancelar_venda`).
+- `appvendas/assets/relatorios.js` — faturamento, ticket médio, produtos
+  mais vendidos, melhores clientes e estoque baixo.
+
+**Banco (migration `0004_create_appvendas_schema.sql`, já aplicada no
+projeto `ClaudeProjects`):** tabelas `clientes`, `fornecedores`, `produtos`,
+`vendas`, `venda_itens`. RLS pública (mesmo racional da migration `0003` —
+piloto interno sem login). A baixa e devolução de estoque acontecem dentro
+de funções Postgres (`criar_venda`/`cancelar_venda`, `security definer`)
+para garantir atomicidade: se algum item não tiver estoque suficiente, a
+venda inteira é revertida.
+
+> **Sem login (mesmo racional do Reports Panel):** acesso liberado para
+> quem tiver a URL, via `anon key`. Reavaliar antes de expor além do
+> piloto interno.
+
 ### Hospedagem (GitHub Pages) e cache
 
 O painel é servido via GitHub Pages a partir deste repositório. `styles.css`,
