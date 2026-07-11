@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Consulta de CEP</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+    }
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f5f5f7;
+      padding: 1.5rem;
+    }
+    @media (prefers-color-scheme: dark) {
+      body { background: #16161a; }
+    }
+    .card {
+      width: 100%;
+      max-width: 480px;
+      background: #ffffff;
+      border-radius: 16px;
+      padding: 2rem;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+    }
+    @media (prefers-color-scheme: dark) {
+      .card { background: #232329; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4); }
+    }
+    h1 {
+      font-size: 1.4rem;
+      margin: 0 0 0.4rem;
+      color: #1d1d1f;
+    }
+    @media (prefers-color-scheme: dark) {
+      h1 { color: #f2f2f2; }
+    }
+    p.subtitle {
+      margin: 0 0 1.5rem;
+      font-size: 0.9rem;
+      color: #6e6e73;
+    }
+    @media (prefers-color-scheme: dark) {
+      p.subtitle { color: #a1a1a6; }
+    }
+    label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-bottom: 0.4rem;
+      color: #444;
+    }
+    @media (prefers-color-scheme: dark) {
+      label { color: #ccc; }
+    }
+    input {
+      width: 100%;
+      padding: 0.7rem 0.9rem;
+      margin-bottom: 1.1rem;
+      border: 1px solid #d2d2d7;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-family: inherit;
+      background: #fff;
+      color: #1d1d1f;
+    }
+    @media (prefers-color-scheme: dark) {
+      input {
+        background: #17171c;
+        border-color: #3a3a40;
+        color: #f2f2f2;
+      }
+    }
+    input:focus {
+      outline: none;
+      border-color: #0071e3;
+    }
+    button {
+      width: 100%;
+      padding: 0.8rem;
+      border: none;
+      border-radius: 8px;
+      background: #0071e3;
+      color: #fff;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    #message {
+      margin-top: 1rem;
+      font-size: 0.9rem;
+      text-align: center;
+      min-height: 1.2em;
+    }
+    #message.error { color: #d92d20; }
+    #result {
+      display: none;
+      margin-top: 1.5rem;
+      border-radius: 10px;
+      border: 1px solid #d2d2d7;
+      padding: 0.9rem 1rem;
+    }
+    @media (prefers-color-scheme: dark) {
+      #result { border-color: #3a3a40; }
+    }
+    #result dl {
+      margin: 0;
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 0.35rem 0.9rem;
+    }
+    #result dt {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: #6e6e73;
+    }
+    @media (prefers-color-scheme: dark) {
+      #result dt { color: #a1a1a6; }
+    }
+    #result dd {
+      margin: 0;
+      font-size: 0.9rem;
+      color: #1d1d1f;
+    }
+    @media (prefers-color-scheme: dark) {
+      #result dd { color: #f2f2f2; }
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Consulta de CEP</h1>
+    <p class="subtitle">Digite um CEP e receba o endereço correspondente.</p>
+
+    <form id="cep-form">
+      <label for="cep">CEP</label>
+      <input type="text" id="cep" name="cep" required maxlength="9"
+        placeholder="Ex: 01001-000" autocomplete="off" inputmode="numeric" />
+
+      <button type="submit" id="submit-btn">Consultar</button>
+    </form>
+    <div id="message"></div>
+
+    <div id="result">
+      <dl>
+        <dt>CEP</dt><dd id="r-cep"></dd>
+        <dt>Logradouro</dt><dd id="r-logradouro"></dd>
+        <dt>Complemento</dt><dd id="r-complemento"></dd>
+        <dt>Bairro</dt><dd id="r-bairro"></dd>
+        <dt>Cidade</dt><dd id="r-cidade"></dd>
+        <dt>UF</dt><dd id="r-uf"></dd>
+        <dt>IBGE</dt><dd id="r-ibge"></dd>
+        <dt>DDD</dt><dd id="r-ddd"></dd>
+      </dl>
+    </div>
+  </div>
+
+  <script type="module">
+    const form = document.getElementById("cep-form");
+    const cepInput = document.getElementById("cep");
+    const submitBtn = document.getElementById("submit-btn");
+    const messageEl = document.getElementById("message");
+    const resultEl = document.getElementById("result");
+
+    const fields = {
+      cep: document.getElementById("r-cep"),
+      logradouro: document.getElementById("r-logradouro"),
+      complemento: document.getElementById("r-complemento"),
+      bairro: document.getElementById("r-bairro"),
+      cidade: document.getElementById("r-cidade"),
+      uf: document.getElementById("r-uf"),
+      ibge: document.getElementById("r-ibge"),
+      ddd: document.getElementById("r-ddd"),
+    };
+
+    function normalizeCep(input) {
+      const digits = String(input || "").replace(/\D/g, "");
+      if (digits.length !== 8) {
+        throw new Error(`CEP inválido: informe 8 dígitos, ex: 01001000 ou 01001-000.`);
+      }
+      return digits;
+    }
+
+    async function consultarCep(cep) {
+      const cepLimpo = normalizeCep(cep);
+      const url = `https://viacep.com.br/ws/${cepLimpo}/json/`;
+
+      const res = await fetch(url);
+      if (!res.ok) {
+        throw new Error(`Falha na requisição ao ViaCEP (status ${res.status}).`);
+      }
+
+      const data = await res.json();
+      if (data.erro) {
+        throw new Error(`CEP ${cepLimpo} não encontrado.`);
+      }
+
+      return data;
+    }
+
+    function renderResult(data) {
+      fields.cep.textContent = data.cep || "-";
+      fields.logradouro.textContent = data.logradouro || "-";
+      fields.complemento.textContent = data.complemento || "-";
+      fields.bairro.textContent = data.bairro || "-";
+      fields.cidade.textContent = data.localidade || "-";
+      fields.uf.textContent = data.uf || "-";
+      fields.ibge.textContent = data.ibge || "-";
+      fields.ddd.textContent = data.ddd || "-";
+      resultEl.style.display = "block";
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      messageEl.textContent = "";
+      messageEl.className = "";
+      resultEl.style.display = "none";
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Consultando...";
+
+      try {
+        const data = await consultarCep(cepInput.value);
+        renderResult(data);
+      } catch (err) {
+        messageEl.textContent = err.message;
+        messageEl.className = "error";
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Consultar";
+      }
+    });
+  </script>
+</body>
+</html>
