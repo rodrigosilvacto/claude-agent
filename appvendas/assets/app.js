@@ -5,6 +5,11 @@
 export const APP_BUILD = "2026-07-11 21:00 -03";
 
 const ROUTES = {
+  home: {
+    breadcrumb: "Início",
+    title: "Painel do dia",
+    load: () => import("./home.js"),
+  },
   clientes: {
     breadcrumb: "Cadastros",
     title: "Clientes",
@@ -32,7 +37,7 @@ const ROUTES = {
   },
 };
 
-const DEFAULT_ROUTE = "clientes";
+const DEFAULT_ROUTE = "home";
 
 const viewEl = document.getElementById("view");
 const breadcrumbEl = document.getElementById("breadcrumb");
@@ -53,13 +58,23 @@ async function renderRoute() {
   breadcrumbEl.textContent = route.breadcrumb;
   titleEl.textContent = route.title;
   topbarActionsEl.innerHTML = "";
-  viewEl.innerHTML = skeletonTable(4);
   closeNavDrawer();
+
+  // O módulo da rota já pinta seu próprio estado inicial (toolbar +
+  // skeleton, abas, etc.) assim que carrega — normalmente em microssegundos,
+  // já que o import fica em cache do navegador. Só mostramos este skeleton
+  // genérico se o carregamento realmente demorar, para não piscar uma tela
+  // "errada" por uma fração de segundo antes da tela real aparecer.
+  const loadingTimer = setTimeout(() => {
+    viewEl.innerHTML = skeletonTable(4);
+  }, 150);
 
   try {
     const mod = await route.load();
+    clearTimeout(loadingTimer);
     await mod.render(viewEl, topbarActionsEl);
   } catch (err) {
+    clearTimeout(loadingTimer);
     console.error(err);
     viewEl.innerHTML = `<div class="empty-state"><p class="empty-state__title">Não foi possível carregar esta tela</p><p class="empty-state__hint">${escapeHtml(err.message || String(err))}</p></div>`;
   }

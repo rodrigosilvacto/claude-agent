@@ -34,16 +34,17 @@ export async function renderCadastro(view, actionsEl, config) {
 
   await loadRows(config, view, "", state);
 
-  registerAutoRefresh(() => loadRows(config, view, searchInput.value.trim(), state, { silent: true }), 15000);
+  registerAutoRefresh(() => loadRows(config, view, searchInput.value.trim(), state), 15000);
 }
 
-async function loadRows(config, view, term, state, opts = {}) {
-  const { silent = false } = opts;
+async function loadRows(config, view, term, state) {
   const countEl = view.querySelector("#record-count");
   const existingCard = view.querySelector(".card");
 
-  if (!silent || !existingCard) {
-    existingCard?.remove();
+  // O skeleton só aparece na primeira montagem da tela. Buscas, o
+  // recarregamento automático e o refresh após salvar/excluir mantêm a
+  // tabela atual visível até os novos dados chegarem — troca sem piscar.
+  if (!existingCard) {
     view.insertAdjacentHTML("beforeend", skeletonTable());
     if (countEl) countEl.textContent = "";
   }

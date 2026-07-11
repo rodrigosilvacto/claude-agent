@@ -91,8 +91,6 @@ svg {
 /* ── Shell ─────────────────────────────────────────────────────────── */
 
 .app-shell {
-  display: grid;
-  grid-template-columns: var(--sidebar-w) 1fr;
   min-height: 100vh;
 }
 
@@ -104,6 +102,9 @@ svg {
   z-index: 39;
 }
 
+/* Fixa ao viewport (não à página) — permanece inteiro na tela mesmo em
+   listas longas, em vez de "sticky" dentro da grid, que pode ser cortado
+   quando o conteúdo ao lado é mais alto que a janela. */
 .sidebar {
   background: var(--ink);
   background-image: linear-gradient(175deg, var(--ink) 0%, #102016 100%);
@@ -111,9 +112,17 @@ svg {
   display: flex;
   flex-direction: column;
   padding: 1.35rem 0 1rem;
-  position: sticky;
+  position: fixed;
   top: 0;
+  left: 0;
+  width: var(--sidebar-w);
   height: 100vh;
+  z-index: 30;
+}
+
+.main-column {
+  margin-left: var(--sidebar-w);
+  min-height: 100vh;
 }
 
 .sidebar__brand {
@@ -959,6 +968,67 @@ svg {
   color: var(--accent-deep);
 }
 
+/* ── Home: saudação + ações rápidas ───────────────────────────────── */
+
+.home-hero {
+  margin-bottom: 1.5rem;
+}
+
+.home-hero__eyebrow {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-deep);
+  margin: 0 0 0.3rem;
+}
+
+.home-hero__title {
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  margin: 0;
+  color: var(--text);
+}
+
+.quick-actions {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+  margin-bottom: 1.6rem;
+}
+
+.quick-action {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 1.1rem 1.25rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  text-decoration: none;
+  transition: transform 0.1s ease, border-color 0.12s ease;
+}
+
+.quick-action:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+}
+
+.quick-action__title {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.quick-action__hint {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
 /* ── Relatórios: price-tag stat cards ─────────────────────────────── */
 
 .stat-grid {
@@ -1035,19 +1105,15 @@ svg {
 
 @media (max-width: 1100px) {
   .stat-grid { grid-template-columns: repeat(2, 1fr); }
+  .quick-actions { grid-template-columns: repeat(2, 1fr); }
 }
 
 @media (max-width: 960px) {
-  .app-shell {
-    grid-template-columns: 1fr;
+  .main-column {
+    margin-left: 0;
   }
 
   .sidebar {
-    position: fixed;
-    left: 0;
-    top: 0;
-    width: var(--sidebar-w);
-    height: 100vh;
     z-index: 40;
     transform: translateX(-100%);
     transition: transform 0.18s ease;
@@ -1093,6 +1159,10 @@ svg {
   }
 
   .stat-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .quick-actions {
     grid-template-columns: 1fr;
   }
 }
