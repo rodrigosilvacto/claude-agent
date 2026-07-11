@@ -1,7 +1,32 @@
 import { supabase } from "./supabaseClient.js";
 import { showToast, openModal, confirmDialog, formatCurrency, formatDate, formatDateTime, escapeHtml, createSearchSelect, registerAutoRefresh } from "./app.js";
 
-const FORMAS_PAGAMENTO = ["Dinheiro", "Pix", "Cartão de crédito", "Cartão de débito", "Boleto"];
+// Cada forma de pagamento vira um "tile" com ícone no fechamento da venda —
+// em vez de uma fileira de pílulas de texto (que não cabiam lado a lado e
+// se sobrepunham), cada uma ganha seu próprio espaço, do jeito que um
+// terminal de caixa de verdade apresenta as opções.
+const FORMAS_PAGAMENTO = [
+  {
+    label: "Dinheiro",
+    icon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="3"/></svg>',
+  },
+  {
+    label: "Pix",
+    icon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z"/></svg>',
+  },
+  {
+    label: "Cartão de crédito",
+    icon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>',
+  },
+  {
+    label: "Cartão de débito",
+    icon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><rect x="5" y="9" width="4" height="3" rx="0.6"/><path d="M5 16h6"/></svg>',
+  },
+  {
+    label: "Boleto",
+    icon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="butt"><path d="M3 4v16" stroke-width="1.5"/><path d="M6.5 4v16" stroke-width="3"/><path d="M11 4v16" stroke-width="1.5"/><path d="M14 4v16" stroke-width="1.5"/><path d="M17.5 4v16" stroke-width="3"/><path d="M21.5 4v16" stroke-width="1.5"/></svg>',
+  },
+];
 
 let clientesOptions = [];
 let produtosOptions = [];
@@ -65,29 +90,21 @@ function produtoSearchOptions() {
 function renderNovaVenda(content) {
   content.innerHTML = `
     <div class="venda-layout">
-      <div class="card card-section">
-        <p class="section-title">Dados da venda</p>
-        <div class="form-grid">
-          <div class="field field--full">
-            <label>Cliente</label>
+      <div class="card card-section venda-itens">
+        <div class="venda-meta">
+          <div class="field" style="flex: 1 1 auto; min-width: 0;">
+            <label>Cliente <span class="field-optional">opcional</span></label>
             <div data-mount="v-cliente"></div>
           </div>
-          <div class="field">
+          <div class="field venda-meta__data">
             <label for="v-data">Data</label>
             <input class="input" type="date" id="v-data" value="${new Date().toISOString().slice(0, 10)}" />
           </div>
-          <div class="field field--full">
-            <label>Forma de pagamento</label>
-            <div class="segmented" id="v-forma" role="radiogroup" aria-label="Forma de pagamento">
-              ${FORMAS_PAGAMENTO.map((forma, idx) => `
-                <button type="button" class="segmented__btn ${idx === 0 ? "is-active" : ""}" data-value="${escapeHtml(forma)}" role="radio" aria-checked="${idx === 0}">${escapeHtml(forma)}</button>
-              `).join("")}
-            </div>
-          </div>
-          <div class="field field--full">
-            <label for="v-obs">Observações</label>
-            <textarea class="input" id="v-obs" rows="2"></textarea>
-          </div>
+        </div>
+        <button type="button" class="venda-obs-toggle" id="v-obs-toggle">+ Adicionar observação</button>
+        <div class="field venda-obs" id="v-obs-field" hidden>
+          <label for="v-obs">Observações</label>
+          <textarea class="input" id="v-obs" rows="2"></textarea>
         </div>
 
         <p class="section-title" style="margin-top: 1.5rem;">Itens</p>
@@ -116,7 +133,19 @@ function renderNovaVenda(content) {
       </div>
 
       <div class="card receipt">
-        <p class="section-title">Resumo</p>
+        <p class="section-title">Fechamento</p>
+
+        <p class="receipt__label">Forma de pagamento</p>
+        <div class="paytiles" id="v-forma" role="radiogroup" aria-label="Forma de pagamento">
+          ${FORMAS_PAGAMENTO.map((forma, idx) => `
+            <button type="button" class="paytile ${idx === 0 ? "is-active" : ""}" data-value="${escapeHtml(forma.label)}" role="radio" aria-checked="${idx === 0}">
+              <span class="paytile__icon">${forma.icon}</span>
+              <span class="paytile__label">${escapeHtml(forma.label)}</span>
+            </button>
+          `).join("")}
+        </div>
+
+        <div class="receipt__tear"></div>
         <div class="receipt__row"><span>Subtotal</span><span id="r-subtotal">${formatCurrency(0)}</span></div>
         <div class="receipt__row">
           <span>Desconto</span>
@@ -133,17 +162,25 @@ function renderNovaVenda(content) {
   const cartBody = content.querySelector("#cart-table tbody");
   const descontoInput = content.querySelector("#v-desconto");
   const formaGroup = content.querySelector("#v-forma");
-  let formaPagamento = FORMAS_PAGAMENTO[0];
+  let formaPagamento = FORMAS_PAGAMENTO[0].label;
 
   formaGroup.addEventListener("click", (e) => {
     const btn = e.target.closest("[data-value]");
     if (!btn) return;
     formaPagamento = btn.dataset.value;
-    formaGroup.querySelectorAll(".segmented__btn").forEach((b) => {
+    formaGroup.querySelectorAll(".paytile").forEach((b) => {
       const active = b === btn;
       b.classList.toggle("is-active", active);
       b.setAttribute("aria-checked", String(active));
     });
+  });
+
+  const obsToggle = content.querySelector("#v-obs-toggle");
+  const obsField = content.querySelector("#v-obs-field");
+  obsToggle.addEventListener("click", () => {
+    obsField.hidden = false;
+    obsToggle.hidden = true;
+    content.querySelector("#v-obs").focus();
   });
 
   const clienteSelect = createSearchSelect({

@@ -75,6 +75,14 @@ svg {
   display: block;
 }
 
+/* [hidden] deve sempre vencer, mesmo contra classes que definem display
+   próprio (ex.: .nav-link, .field) — sem isso, um elemento com a mesma
+   especificidade CSS declarada depois no arquivo reaparece mesmo com o
+   atributo hidden presente. */
+[hidden] {
+  display: none !important;
+}
+
 :focus-visible {
   outline: 2px solid var(--accent-deep);
   outline-offset: 2px;
@@ -1071,6 +1079,101 @@ svg {
   color: var(--accent-deep);
 }
 
+.receipt__label {
+  font-family: var(--font-sans);
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin: 0 0 0.6rem;
+}
+
+/* Cabeçalho da venda: quem é o cliente (opcional) e quando — compacto,
+   porque numa venda de balcão isso raramente muda em relação ao padrão
+   (sem cliente, hoje). O grosso da tela é para os itens. */
+.venda-meta {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-end;
+  margin-bottom: 0.6rem;
+}
+
+.venda-meta__data {
+  flex: 0 0 148px;
+}
+
+.field-optional {
+  font-weight: 500;
+  color: var(--text-muted);
+  opacity: 0.7;
+  text-transform: none;
+}
+
+.venda-obs-toggle {
+  display: inline-block;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent-deep);
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  margin-bottom: 1rem;
+}
+
+.venda-obs-toggle:hover {
+  text-decoration: underline;
+}
+
+.venda-obs {
+  margin-bottom: 1.25rem;
+}
+
+/* Forma de pagamento como tiles com ícone — a ação de fechamento da venda,
+   não mais uma fileira de pílulas de texto que não cabiam lado a lado. */
+.paytiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+  gap: 0.5rem;
+}
+
+.paytile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.65rem 0.4rem;
+  background: var(--surface);
+  border: 1.5px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  transition: border-color 0.12s ease, background 0.12s ease, color 0.12s ease;
+}
+
+.paytile:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.paytile.is-active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-deep);
+}
+
+.paytile__icon {
+  display: flex;
+}
+
+.paytile__label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-align: center;
+  line-height: 1.15;
+}
+
 /* ── Home: saudação + ações rápidas ───────────────────────────────── */
 
 .home-hero {
@@ -1267,5 +1370,14 @@ svg {
 
   .quick-actions {
     grid-template-columns: 1fr;
+  }
+
+  .venda-meta {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .venda-meta__data {
+    flex: 1 1 auto;
   }
 }

@@ -66,25 +66,41 @@ function stopAtivoWatch() {
   }
 }
 
-async function refresh(session) {
+// Chaveado pelo access_token da sessão sendo aplicada. Isso evita trabalho e
+// re-render duplicados quando o mesmo login dispara duas notificações (o
+// refresh manual em signIn() + o evento SIGNED_IN automático chegando logo
+// em seguida) — mas, ao contrário de só comparar e pular a segunda chamada,
+// aqui ela reaproveita a MESMA promise em andamento. Isso importa: se só
+// pulássemos a segunda chamada, um caller que dependesse dela (como
+// signIn() checando se a conta está ativa) poderia seguir em frente antes
+// da primeira chamada terminar de buscar o usuário — foi exatamente esse
+// race que fazia logins válidos serem derrubados como "conta desativada".
+let refreshToken = null;
+let refreshPromise = null;
+
+function refresh(session) {
   const nextSession = session || null;
+  const token = nextSession ? nextSession.access_token : null;
 
-  // Evita trabalho e re-render duplicados quando o estado não mudou de fato
-  // (ex.: signOut() explícito seguido do evento SIGNED_OUT automático, ou o
-  // evento SIGNED_IN chegando logo depois do refresh manual em signIn()).
-  if (!nextSession && !currentSession) return;
-  if (nextSession && currentSession && nextSession.access_token === currentSession.access_token) return;
-
-  currentSession = nextSession;
-  currentUsuario = currentSession ? await loadUsuario(currentSession.user.id) : null;
-
-  if (currentSession && currentUsuario && currentUsuario.ativo) {
-    startAtivoWatch(currentSession.user.id);
-  } else {
-    stopAtivoWatch();
+  if (token === refreshToken) {
+    return refreshPromise || Promise.resolve();
   }
 
-  listeners.forEach((fn) => fn());
+  refreshToken = token;
+  refreshPromise = (async () => {
+    currentSession = nextSession;
+    currentUsuario = currentSession ? await loadUsuario(currentSession.user.id) : null;
+
+    if (currentSession && currentUsuario && currentUsuario.ativo) {
+      startAtivoWatch(currentSession.user.id);
+    } else {
+      stopAtivoWatch();
+    }
+
+    listeners.forEach((fn) => fn());
+  })();
+
+  return refreshPromise;
 }
 
 export function onAuthChange(callback) {
@@ -108,7 +124,10 @@ export function initAuth() {
         // token em memória e seguimos.
         if (event === "INITIAL_SESSION") return;
         if (event === "TOKEN_REFRESHED") {
-          if (session) currentSession = session;
+          if (session) {
+            currentSession = session;
+            refreshToken = session.access_token;
+          }
           return;
         }
         refresh(session);
