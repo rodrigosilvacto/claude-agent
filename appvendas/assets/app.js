@@ -4,7 +4,7 @@
 
 import { initAuth, isLoggedIn, isAdmin, getCurrentUsuario, signOut, onAuthChange } from "./auth.js";
 
-export const APP_BUILD = "2026-07-12 14:30 -03";
+export const APP_BUILD = "2026-07-11 22:45 -03";
 
 const ROUTES = {
   home: {
