@@ -1,10 +1,13 @@
 // AppVendas — agenda de atendimentos: a equipe marca um horário para um
 // cliente (com um produto associado), com visão por dia, semana ou mês.
-// Todo agendamento novo nasce "agendado" e só sai desse estado quando
-// alguém clica em "Atendido" na listagem do dia.
+// Todo agendamento novo nasce "agendado". Clicar em "Atendido" na listagem
+// do dia não muda o status na hora — abre a tela de Vendas pré-preenchida
+// com os dados do atendimento, e o agendamento só vira "atendido" quando o
+// usuário confirma a venda por lá (ver setVendaPrefill/consumeVendaPrefill
+// em app.js e o handler de "Finalizar venda" em vendas.js).
 
 import { supabase } from "./supabaseClient.js";
-import { showToast, openModal, closeModal, confirmDialog, escapeHtml, createSearchSelect, registerAutoRefresh } from "./app.js";
+import { showToast, openModal, closeModal, confirmDialog, escapeHtml, createSearchSelect, registerAutoRefresh, setVendaPrefill } from "./app.js";
 
 // Horário de atendimento padrão da loja — ajuste aqui se mudar.
 const HORARIOS = ["08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00"];
@@ -244,14 +247,19 @@ async function renderDia(body, anchor, onChange) {
   });
 
   body.querySelectorAll("[data-atendido]").forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      const { error } = await supabase.from("agendamentos").update({ status: "atendido" }).eq("id", btn.dataset.atendido);
-      if (error) {
-        showToast(error.message, "error");
-        return;
-      }
-      showToast("Agendamento marcado como atendido.");
-      onChange();
+    btn.addEventListener("click", () => {
+      const ag = rows.find((r) => r.id === btn.dataset.atendido);
+      if (!ag) return;
+      setVendaPrefill({
+        agendamentoId: ag.id,
+        clienteId: ag.cliente_id,
+        clienteNome: ag.cliente?.nome || null,
+        produtoId: ag.produto_id,
+        dataAgendamento: ag.data_agendamento,
+        horario: ag.horario.slice(0, 5),
+        observacoes: ag.observacoes || "",
+      });
+      window.location.hash = "#/vendas";
     });
   });
 

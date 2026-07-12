@@ -1,5 +1,5 @@
 import { supabase } from "./supabaseClient.js";
-import { showToast, openModal, confirmDialog, formatCurrency, formatDate, formatDateTime, escapeHtml, createSearchSelect, registerAutoRefresh } from "./app.js";
+import { showToast, openModal, confirmDialog, formatCurrency, formatDate, formatDateTime, escapeHtml, createSearchSelect, registerAutoRefresh, consumeVendaPrefill } from "./app.js";
 
 // Cada forma de pagamento vira um "tile" com ícone no fechamento da venda —
 // em vez de uma fileira de pílulas de texto (que não cabiam lado a lado e
@@ -31,10 +31,14 @@ const FORMAS_PAGAMENTO = [
 let clientesOptions = [];
 let produtosOptions = [];
 let cart = [];
+// Id do agendamento que originou a venda em andamento (fluxo Agenda → Vendas,
+// via setVendaPrefill/consumeVendaPrefill em app.js). Null numa venda avulsa.
+let agendamentoOrigemId = null;
 
 export async function render(view, actionsEl) {
   actionsEl.innerHTML = "";
   cart = [];
+  agendamentoOrigemId = null;
 
   view.innerHTML = `
     <div class="toolbar" style="margin-bottom: 1.25rem;">
@@ -88,9 +92,17 @@ function produtoSearchOptions() {
 }
 
 function renderNovaVenda(content) {
+  const prefill = consumeVendaPrefill();
+  agendamentoOrigemId = prefill?.agendamentoId || null;
+
   content.innerHTML = `
     <div class="venda-layout">
       <div class="card card-section venda-itens">
+        ${prefill ? `
+          <div class="form-info">
+            Confirmando venda do atendimento de ${escapeHtml(prefill.clienteNome || "cliente sem cadastro")} em ${formatDate(prefill.dataAgendamento)} às ${prefill.horario}. Revise os dados e finalize para registrar a venda.
+          </div>
+        ` : ""}
         <div class="venda-meta">
           <div class="field" style="flex: 1 1 auto; min-width: 0;">
             <label>Cliente <span class="field-optional">opcional</span></label>
@@ -177,16 +189,24 @@ function renderNovaVenda(content) {
 
   const obsToggle = content.querySelector("#v-obs-toggle");
   const obsField = content.querySelector("#v-obs-field");
+  const obsInput = content.querySelector("#v-obs");
   obsToggle.addEventListener("click", () => {
     obsField.hidden = false;
     obsToggle.hidden = true;
-    content.querySelector("#v-obs").focus();
+    obsInput.focus();
   });
+
+  if (prefill) {
+    obsField.hidden = false;
+    obsToggle.hidden = true;
+    obsInput.value = `Venda referente ao atendimento agendado em ${formatDate(prefill.dataAgendamento)} às ${prefill.horario}.${prefill.observacoes ? ` Obs. do agendamento: ${prefill.observacoes}` : ""}`;
+  }
 
   const clienteSelect = createSearchSelect({
     container: content.querySelector('[data-mount="v-cliente"]'),
     placeholder: "Buscar cliente por nome ou documento… (opcional)",
     options: clienteSearchOptions(),
+    value: prefill?.clienteId || null,
     allowClear: true,
   });
 
@@ -196,6 +216,12 @@ function renderNovaVenda(content) {
     options: produtoSearchOptions(),
     allowClear: true,
   });
+
+  if (prefill?.produtoId) {
+    const produto = produtosOptions.find((p) => p.id === prefill.produtoId);
+    if (produto) cart.push({ produto_id: produto.id, nome: produto.nome, quantidade: 1, preco_unitario: produto.preco });
+    else showToast("Produto do atendimento não encontrado no catálogo de vendas.", "error");
+  }
 
   function renderCart() {
     if (cart.length === 0) {
@@ -281,7 +307,14 @@ function renderNovaVenda(content) {
       return;
     }
 
-    showToast("Venda registrada com sucesso.");
+    if (agendamentoOrigemId) {
+      const { error: agError } = await supabase.from("agendamentos").update({ status: "atendido" }).eq("id", agendamentoOrigemId);
+      showToast(agError ? "Venda registrada, mas não foi possível confirmar o atendimento na agenda." : "Venda registrada e atendimento confirmado.", agError ? "error" : "success");
+    } else {
+      showToast("Venda registrada com sucesso.");
+    }
+
+    agendamentoOrigemId = null;
     cart = [];
     produtosOptions = await loadProdutos();
     renderNovaVenda(content);

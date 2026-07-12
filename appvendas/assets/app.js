@@ -12,7 +12,7 @@ import { initAuth, isLoggedIn, isAdmin, getCurrentUsuario, signOut, onAuthChange
 // ES modules carregar duas instâncias do módulo (hashchange listener e
 // boot() duplicados). Ver commit e4f8448 (correção original) e 3659424/
 // e75bd3a (reintrodução e reversão do bug).
-export const APP_BUILD = "2026-07-12 15:10 -03";
+export const APP_BUILD = "2026-07-12 16:40 -03";
 
 const ROUTES = {
   home: {
@@ -478,6 +478,25 @@ export function stopAutoRefresh() {
     stopCurrentAutoRefresh();
     stopCurrentAutoRefresh = null;
   }
+}
+
+// ── Transferência Agenda → Vendas ──────────────────────────────────
+//
+// Quando um atendimento é confirmado na Agenda, a tela de Vendas abre
+// pré-preenchida com os dados desse atendimento — o vínculo some assim
+// que é lido (uso único), então voltar a abrir "Nova venda" depois não
+// reaplica um atendimento antigo.
+
+let pendingVendaOrigem = null;
+
+export function setVendaPrefill(data) {
+  pendingVendaOrigem = data;
+}
+
+export function consumeVendaPrefill() {
+  const data = pendingVendaOrigem;
+  pendingVendaOrigem = null;
+  return data;
 }
 
 // ── Formatação ──────────────────────────────────────────────────────

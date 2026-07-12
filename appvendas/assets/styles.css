@@ -1085,6 +1085,16 @@ svg {
   margin-bottom: 1rem;
 }
 
+.form-info {
+  background: var(--success-soft);
+  color: var(--success);
+  border-radius: var(--radius-sm);
+  padding: 0.65rem 0.85rem;
+  font-size: 0.84rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+}
+
 /* ── Toast ─────────────────────────────────────────────────────────── */
 
 .toast-stack {
