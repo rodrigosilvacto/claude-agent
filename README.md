@@ -86,7 +86,7 @@ desabilitado**, ver abaixo.
 ## AppVendas (`/appvendas`)
 
 Aplicação corporativa de gestão de vendas: menu lateral com **Cadastros**
-(Clientes, Produtos, Fornecedores), **Vendas** (Movimentação de Vendas e
+(Clientes, Produtos, Fornecedores), **Movimentações** (Vendas e
 Agendamento) e **Relatórios**. Mesmo padrão do resto do repo: HTML/JS
 estático + Supabase, sem build, no projeto `ClaudeProjects`.
 
@@ -96,13 +96,14 @@ estático + Supabase, sem build, no projeto `ClaudeProjects`.
 - `appvendas/assets/cadastro.js` — motor genérico de CRUD (listar, buscar,
   criar/editar via modal, excluir) reaproveitado por `clientes.js`,
   `produtos.js` e `fornecedores.js`, que só configuram campos e colunas.
-- `appvendas/assets/vendas.js` — tela de "Movimentação de Vendas": monta o
-  carrinho (produto + quantidade), finaliza a venda via RPC `criar_venda`
-  e lista o histórico com detalhe (recibo) e cancelamento (RPC
-  `cancelar_venda`).
+- `appvendas/assets/vendas.js` — tela de "Vendas" (grupo Movimentações):
+  monta o carrinho (produto + quantidade), finaliza a venda via RPC
+  `criar_venda` e lista o histórico com detalhe (recibo) e cancelamento
+  (RPC `cancelar_venda`).
 - `appvendas/assets/agenda.js` — tela de "Agendamento" (item próprio no
-  menu, fora de Movimentação de Vendas): agenda de atendimentos por
-  cliente/produto com visão dia/semana/mês sobre a tabela `agendamentos`
+  menu, dentro do grupo Movimentações, fora da tela de Vendas): agenda
+  de atendimentos por cliente/produto com visão dia/semana/mês sobre a
+  tabela `agendamentos`
   (`data_agendamento`, `horario`, `status` "agendado"/"atendido",
   `cliente_id`, `produto_id`, `observacoes`).
 - `appvendas/assets/relatorios.js` — faturamento, ticket médio, produtos

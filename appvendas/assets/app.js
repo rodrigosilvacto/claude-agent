@@ -36,12 +36,12 @@ const ROUTES = {
     load: () => import("./fornecedores.js"),
   },
   vendas: {
-    breadcrumb: "Vendas",
-    title: "Movimentação de Vendas",
+    breadcrumb: "Movimentações",
+    title: "Vendas",
     load: () => import("./vendas.js"),
   },
   agenda: {
-    breadcrumb: "Vendas",
+    breadcrumb: "Movimentações",
     title: "Agendamento",
     load: () => import("./agenda.js"),
   },
