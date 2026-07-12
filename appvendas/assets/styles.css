@@ -1252,6 +1252,257 @@ svg {
   line-height: 1.15;
 }
 
+/* ── Agenda de atendimentos ────────────────────────────────────────── */
+
+.status--agendado { color: var(--warning); background: var(--warning-soft); }
+.status--atendido { color: var(--success); background: var(--success-soft); }
+
+.agenda__toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.agenda__nav {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1 1 260px;
+}
+
+.agenda__label {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 0.95rem;
+  color: var(--text);
+  margin: 0 0 0 0.3rem;
+}
+
+/* Dia: lista vertical de horários, cada um sua própria linha. */
+
+.agenda-day {
+  display: flex;
+  flex-direction: column;
+}
+
+.agenda-slot {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.85rem 0.2rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.agenda-slot:last-child {
+  border-bottom: none;
+}
+
+.agenda-slot__hora {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 0.88rem;
+  color: var(--text);
+  flex: 0 0 56px;
+}
+
+.agenda-slot--livre .agenda-slot__hora {
+  color: var(--text-muted);
+}
+
+.agenda-slot__info {
+  flex: 1;
+  min-width: 0;
+}
+
+.agenda-slot__cliente {
+  margin: 0;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.agenda-slot__detalhe {
+  margin: 0.1rem 0 0;
+  font-size: 0.8rem;
+}
+
+.agenda-slot--livre {
+  opacity: 0.75;
+}
+
+/* Semana: 7 colunas, cada uma com um resumo compacto do dia. */
+
+.agenda-week {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.75rem;
+}
+
+.agenda-week__col {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 0.6rem;
+  min-height: 140px;
+}
+
+.agenda-week__col.is-today {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.agenda-week__head {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  background: none;
+  border: none;
+  padding: 0 0 0.5rem;
+  margin-bottom: 0.5rem;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.agenda-week__dow {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.agenda-week__daynum {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 1.1rem;
+  color: var(--text);
+}
+
+.agenda-week__items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.agenda-week__empty {
+  text-align: center;
+  font-size: 0.78rem;
+  margin: 0.5rem 0 0;
+}
+
+.agenda-week__item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.05rem;
+  width: 100%;
+  background: var(--warning-soft);
+  border: none;
+  border-radius: 6px;
+  padding: 0.3rem 0.45rem;
+  cursor: pointer;
+  text-align: left;
+}
+
+.agenda-week__item.is-atendido {
+  background: var(--success-soft);
+}
+
+.agenda-week__hora {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.agenda-week__nome {
+  font-size: 0.76rem;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+/* Mês: grade de dias com contagem de agendados/atendidos. */
+
+.agenda-month__dow-row {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  margin-bottom: 0.5rem;
+}
+
+.agenda-month__dow-row span {
+  text-align: center;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.agenda-month__grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.4rem;
+}
+
+.agenda-month__cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  aspect-ratio: 1;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 0.4rem;
+  cursor: pointer;
+  transition: border-color 0.12s ease;
+}
+
+.agenda-month__cell:hover {
+  border-color: var(--accent);
+}
+
+.agenda-month__cell.is-today {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.agenda-month__cell.is-outside {
+  opacity: 0.4;
+}
+
+.agenda-month__daynum {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 0.9rem;
+  color: var(--text);
+}
+
+.agenda-month__badges {
+  display: flex;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.agenda-month__badge {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 0.05rem 0.4rem;
+}
+
+.agenda-month__badge--agendado { color: var(--warning); background: var(--warning-soft); }
+.agenda-month__badge--atendido { color: var(--success); background: var(--success-soft); }
+
 /* ── Home: saudação + ações rápidas ───────────────────────────────── */
 
 .home-hero {
@@ -1385,6 +1636,29 @@ svg {
   .venda-layout { grid-template-columns: 1fr; }
   .form-grid { grid-template-columns: 1fr; }
   .report-grid { grid-template-columns: 1fr; }
+
+  .agenda-week {
+    grid-template-columns: repeat(7, minmax(96px, 1fr));
+    overflow-x: auto;
+    padding-bottom: 0.4rem;
+  }
+
+  .agenda-month {
+    overflow-x: auto;
+    padding-bottom: 0.4rem;
+  }
+
+  .agenda-month__dow-row,
+  .agenda-month__grid {
+    grid-template-columns: repeat(7, minmax(96px, 1fr));
+    width: max-content;
+    min-width: 100%;
+  }
+
+  .agenda-month__cell {
+    aspect-ratio: auto;
+    min-height: 72px;
+  }
 }
 
 @media (max-width: 1100px) {
