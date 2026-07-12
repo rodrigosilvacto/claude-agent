@@ -1,6 +1,5 @@
 import { supabase } from "./supabaseClient.js";
 import { showToast, openModal, confirmDialog, formatCurrency, formatDate, formatDateTime, escapeHtml, createSearchSelect, registerAutoRefresh } from "./app.js";
-import { render as renderAgenda } from "./agenda.js";
 
 // Cada forma de pagamento vira um "tile" com ícone no fechamento da venda —
 // em vez de uma fileira de pílulas de texto (que não cabiam lado a lado e
@@ -42,7 +41,6 @@ export async function render(view, actionsEl) {
       <div style="display:flex; gap:0.5rem;">
         <button type="button" class="btn btn--primary" id="tab-nova">Nova venda</button>
         <button type="button" class="btn btn--ghost" id="tab-historico">Histórico</button>
-        <button type="button" class="btn btn--ghost" id="tab-agenda">Agenda</button>
       </div>
     </div>
     <div id="tab-content"></div>
@@ -50,21 +48,17 @@ export async function render(view, actionsEl) {
 
   const tabNova = view.querySelector("#tab-nova");
   const tabHistorico = view.querySelector("#tab-historico");
-  const tabAgenda = view.querySelector("#tab-agenda");
   const content = view.querySelector("#tab-content");
 
   function activate(tab) {
     tabNova.className = tab === "nova" ? "btn btn--primary" : "btn btn--ghost";
     tabHistorico.className = tab === "historico" ? "btn btn--primary" : "btn btn--ghost";
-    tabAgenda.className = tab === "agenda" ? "btn btn--primary" : "btn btn--ghost";
     if (tab === "nova") renderNovaVenda(content);
-    else if (tab === "historico") renderHistorico(content);
-    else renderAgenda(content);
+    else renderHistorico(content);
   }
 
   tabNova.addEventListener("click", () => activate("nova"));
   tabHistorico.addEventListener("click", () => activate("historico"));
-  tabAgenda.addEventListener("click", () => activate("agenda"));
 
   [clientesOptions, produtosOptions] = await Promise.all([loadClientes(), loadProdutos()]);
 

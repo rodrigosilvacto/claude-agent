@@ -32,6 +32,11 @@ const ROUTES = {
     title: "Movimentação de Vendas",
     load: () => import("./vendas.js"),
   },
+  agenda: {
+    breadcrumb: "Vendas",
+    title: "Agendamento",
+    load: () => import("./agenda.js"),
+  },
   relatorios: {
     breadcrumb: "Relatórios",
     title: "Visão geral",
