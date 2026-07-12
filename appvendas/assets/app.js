@@ -4,7 +4,15 @@
 
 import { initAuth, isLoggedIn, isAdmin, getCurrentUsuario, signOut, onAuthChange } from "./auth.js";
 
-export const APP_BUILD = "2026-07-11 22:45 -03";
+// Atualize este timestamp a cada mudança em app.js — é como a sidebar mostra
+// se o navegador está com uma cópia antiga em cache (ver #sidebar-build
+// abaixo). Só isso é versionado manualmente: o <script> de entrada em
+// index.html NÃO pode ganhar um "?v=" — todo o resto do app importa
+// "./app.js" sem versão, e um especificador diferente no entry point faz o
+// ES modules carregar duas instâncias do módulo (hashchange listener e
+// boot() duplicados). Ver commit e4f8448 (correção original) e 3659424/
+// e75bd3a (reintrodução e reversão do bug).
+export const APP_BUILD = "2026-07-12 15:10 -03";
 
 const ROUTES = {
   home: {
@@ -62,6 +70,12 @@ const userChipAvatar = document.getElementById("user-chip-avatar");
 const userChipName = document.getElementById("user-chip-name");
 const userChipMeta = document.getElementById("user-chip-meta");
 const logoutBtn = document.getElementById("logout-btn");
+
+// Diagnóstico de cache: se este build não bater com o timestamp do último
+// commit em app.js, o navegador está servindo uma cópia antiga em cache —
+// mesmo padrão usado em reports/index.html. Ver nota em APP_BUILD acima.
+const sidebarBuildEl = document.getElementById("sidebar-build");
+if (sidebarBuildEl) sidebarBuildEl.textContent = `build ${APP_BUILD}`;
 
 function initials(nome) {
   const parts = String(nome || "").trim().split(/\s+/).filter(Boolean);

@@ -315,6 +315,14 @@ svg {
   line-height: 1.2;
 }
 
+.sidebar__build {
+  margin: 0.7rem 0 0;
+  font-size: 0.68rem;
+  color: var(--ink-text-muted);
+  opacity: 0.6;
+  text-align: center;
+}
+
 .main-column {
   display: flex;
   flex-direction: column;
@@ -1290,7 +1298,8 @@ svg {
 .agenda-slot {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
   padding: 0.85rem 0.2rem;
   border-bottom: 1px solid var(--line);
 }

@@ -51,7 +51,7 @@ async function loadProdutos() {
 async function loadAgendamentos(startKey, endKey) {
   const { data, error } = await supabase
     .from("agendamentos")
-    .select("id, data_agendamento, horario, status, observacoes, cliente:clientes(nome), produto:produtos(nome)")
+    .select("id, data_agendamento, horario, status, observacoes, cliente_id, produto_id, cliente:clientes(nome), produto:produtos(nome)")
     .gte("data_agendamento", startKey)
     .lte("data_agendamento", endKey)
     .order("horario", { ascending: true });
@@ -163,7 +163,7 @@ export async function render(content) {
   });
 
   content.querySelector("#ag-novo").addEventListener("click", () => {
-    openNovoAgendamento({ data: toKey(state.anchor) }, draw);
+    openAgendamentoForm({ data: toKey(state.anchor) }, draw);
   });
 
   setView("dia");
@@ -204,7 +204,22 @@ async function renderDia(body, anchor, onChange) {
   `;
 
   body.querySelectorAll("[data-slot-livre]").forEach((btn) => {
-    btn.addEventListener("click", () => openNovoAgendamento({ data: key, horario: btn.dataset.slotLivre }, onChange));
+    btn.addEventListener("click", () => openAgendamentoForm({ data: key, horario: btn.dataset.slotLivre }, onChange));
+  });
+
+  body.querySelectorAll("[data-editar]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const ag = rows.find((r) => r.id === btn.dataset.editar);
+      if (!ag) return;
+      openAgendamentoForm({
+        id: ag.id,
+        clienteId: ag.cliente_id,
+        produtoId: ag.produto_id,
+        data: ag.data_agendamento,
+        horario: ag.horario.slice(0, 5),
+        observacoes: ag.observacoes || "",
+      }, onChange);
+    });
   });
 
   body.querySelectorAll("[data-atendido]").forEach((btn) => {
@@ -258,6 +273,7 @@ function slotHtml(hora, ag) {
       <span class="status status--${atendido ? "atendido" : "agendado"}">${atendido ? "Atendido" : "Agendado"}</span>
       ${atendido ? "" : `
         <button type="button" class="btn btn--primary btn--sm" data-atendido="${ag.id}">Atendido</button>
+        <button type="button" class="btn btn--ghost btn--sm" data-editar="${ag.id}">Editar</button>
         <button type="button" class="btn btn--ghost btn--sm" data-excluir="${ag.id}">Excluir</button>
       `}
     </div>
@@ -369,10 +385,11 @@ async function renderMes(body, anchor, goToDay) {
   });
 }
 
-// ── Modal de novo agendamento ────────────────────────────────────────
+// ── Modal de novo agendamento / edição ──────────────────────────────
 
-async function openNovoAgendamento({ data, horario }, onSaved) {
-  const body = openModal("Novo agendamento");
+async function openAgendamentoForm({ id = null, clienteId = null, produtoId = null, data, horario, observacoes = "" } = {}, onSaved) {
+  const editando = Boolean(id);
+  const body = openModal(editando ? "Editar agendamento" : "Novo agendamento");
 
   body.innerHTML = `
     <form id="agenda-form">
@@ -396,12 +413,12 @@ async function openNovoAgendamento({ data, horario }, onSaved) {
         </div>
         <div class="field field--full">
           <label for="ag-obs">Observações</label>
-          <textarea class="input" id="ag-obs" rows="2"></textarea>
+          <textarea class="input" id="ag-obs" rows="2">${escapeHtml(observacoes)}</textarea>
         </div>
       </div>
       <div class="form-actions">
         <button type="button" class="btn btn--ghost" id="ag-cancel">Cancelar</button>
-        <button type="submit" class="btn btn--primary">Agendar</button>
+        <button type="submit" class="btn btn--primary">${editando ? "Salvar" : "Agendar"}</button>
       </div>
     </form>
   `;
@@ -410,6 +427,7 @@ async function openNovoAgendamento({ data, horario }, onSaved) {
     container: body.querySelector('[data-mount="ag-cliente"]'),
     placeholder: "Buscar cliente por nome ou documento… (opcional)",
     options: clientesOptions.map((c) => ({ value: c.id, label: c.nome, meta: c.documento || "" })),
+    value: clienteId,
     allowClear: true,
   });
 
@@ -417,6 +435,7 @@ async function openNovoAgendamento({ data, horario }, onSaved) {
     container: body.querySelector('[data-mount="ag-produto"]'),
     placeholder: "Buscar produto…",
     options: produtosOptions.map((p) => ({ value: p.id, label: p.nome, meta: p.sku || "" })),
+    value: produtoId,
     allowClear: true,
   });
 
@@ -426,7 +445,9 @@ async function openNovoAgendamento({ data, horario }, onSaved) {
   async function refreshHorarios(preferido) {
     let ocupados = new Set();
     if (dataInput.value) {
-      const { data: rows } = await supabase.from("agendamentos").select("horario").eq("data_agendamento", dataInput.value);
+      let query = supabase.from("agendamentos").select("horario").eq("data_agendamento", dataInput.value);
+      if (editando) query = query.neq("id", id);
+      const { data: rows } = await query;
       ocupados = new Set((rows || []).map((r) => r.horario.slice(0, 5)));
     }
     const manterSelecionado = preferido && !ocupados.has(preferido) ? preferido : horarioSelect.value;
@@ -445,21 +466,23 @@ async function openNovoAgendamento({ data, horario }, onSaved) {
     const errorEl = body.querySelector("#agenda-form-error");
     errorEl.innerHTML = "";
 
-    const produtoId = produtoSelect.getValue();
-    if (!produtoId) {
+    const produtoIdSelecionado = produtoSelect.getValue();
+    if (!produtoIdSelecionado) {
       errorEl.innerHTML = `<div class="form-error">Selecione um produto.</div>`;
       return;
     }
 
     const payload = {
       cliente_id: clienteSelect.getValue() || null,
-      produto_id: produtoId,
+      produto_id: produtoIdSelecionado,
       data_agendamento: dataInput.value,
       horario: horarioSelect.value,
       observacoes: body.querySelector("#ag-obs").value || null,
     };
 
-    const { error } = await supabase.from("agendamentos").insert(payload);
+    const { error } = editando
+      ? await supabase.from("agendamentos").update(payload).eq("id", id)
+      : await supabase.from("agendamentos").insert(payload);
 
     if (error) {
       const friendly = error.code === "23505" ? "Esse horário acabou de ser reservado por outra pessoa. Escolha outro." : error.message;
@@ -468,7 +491,7 @@ async function openNovoAgendamento({ data, horario }, onSaved) {
       return;
     }
 
-    showToast("Agendamento criado.");
+    showToast(editando ? "Agendamento atualizado." : "Agendamento criado.");
     closeModal();
     if (onSaved) onSaved();
   });

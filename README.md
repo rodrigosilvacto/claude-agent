@@ -86,12 +86,13 @@ desabilitado**, ver abaixo.
 ## AppVendas (`/appvendas`)
 
 Aplicação corporativa de gestão de vendas: menu lateral com **Cadastros**
-(Clientes, Produtos, Fornecedores), **Vendas** (Movimentação de Vendas) e
-**Relatórios**. Mesmo padrão do resto do repo: HTML/JS estático + Supabase,
-sem build, no projeto `ClaudeProjects`.
+(Clientes, Produtos, Fornecedores), **Vendas** (Movimentação de Vendas e
+Agendamento) e **Relatórios**. Mesmo padrão do resto do repo: HTML/JS
+estático + Supabase, sem build, no projeto `ClaudeProjects`.
 
 - `appvendas/index.html` — shell com sidebar, roteamento por hash
-  (`#/clientes`, `#/produtos`, `#/fornecedores`, `#/vendas`, `#/relatorios`).
+  (`#/clientes`, `#/produtos`, `#/fornecedores`, `#/vendas`, `#/agenda`,
+  `#/relatorios`).
 - `appvendas/assets/cadastro.js` — motor genérico de CRUD (listar, buscar,
   criar/editar via modal, excluir) reaproveitado por `clientes.js`,
   `produtos.js` e `fornecedores.js`, que só configuram campos e colunas.
@@ -99,6 +100,11 @@ sem build, no projeto `ClaudeProjects`.
   carrinho (produto + quantidade), finaliza a venda via RPC `criar_venda`
   e lista o histórico com detalhe (recibo) e cancelamento (RPC
   `cancelar_venda`).
+- `appvendas/assets/agenda.js` — tela de "Agendamento" (item próprio no
+  menu, fora de Movimentação de Vendas): agenda de atendimentos por
+  cliente/produto com visão dia/semana/mês sobre a tabela `agendamentos`
+  (`data_agendamento`, `horario`, `status` "agendado"/"atendido",
+  `cliente_id`, `produto_id`, `observacoes`).
 - `appvendas/assets/relatorios.js` — faturamento, ticket médio, produtos
   mais vendidos, melhores clientes e estoque baixo.
 
@@ -108,11 +114,39 @@ projeto `ClaudeProjects`):** tabelas `clientes`, `fornecedores`, `produtos`,
 piloto interno sem login). A baixa e devolução de estoque acontecem dentro
 de funções Postgres (`criar_venda`/`cancelar_venda`, `security definer`)
 para garantir atomicidade: se algum item não tiver estoque suficiente, a
-venda inteira é revertida.
+venda inteira é revertida. A tabela `agendamentos` (usada por `agenda.js`)
+**não tem migration correspondente neste repositório** — foi criada
+diretamente no projeto Supabase; vale registrar essa migration
+retroativamente se mexer no schema de novo.
 
 > **Sem login (mesmo racional do Reports Panel):** acesso liberado para
 > quem tiver a URL, via `anon key`. Reavaliar antes de expor além do
 > piloto interno.
+
+> **Conta de teste (role `caixa`):** login `qa.appvendas`, senha
+> `AppVendasQA2026!`. Criada só para validar telas end-to-end (Vendas,
+> Agendamento) sem usar uma conta pessoal. Rotacionar/remover antes de
+> abrir o app além do piloto interno — mesma lógica de "sem login" acima.
+
+### Cache do `app.js` — NÃO adicione `?v=N` no `<script>` de entrada
+
+Ao contrário do Reports Panel (ver seção seguinte), o `<script>` de entrada
+de `appvendas/index.html` **não pode** ter um especificador versionado
+(`./assets/app.js?v=N`). Todo o resto do app importa `app.js` sem versão
+(`import { ... } from "./app.js"` em `vendas.js`, `agenda.js`, `clientes.js`,
+`login.js` etc.) — o ES modules identifica um módulo pela URL exata do
+import, então um entry point com `?v=` cria uma **segunda instância**
+separada do módulo, com seus próprios efeitos colaterais de topo (listener
+de `hashchange`, `boot()`) rodando em paralelo com estado independente.
+Isso já causou fetches/renders duplicados (corrigido no commit `e4f8448`) e
+foi reintroduzido e revertido de novo em `3659424`/`e75bd3a` — se a ideia de
+versionar o entry point voltar a parecer boa, é armadilha, não melhoria.
+
+Para diagnosticar cache antigo sem versionar o script: a sidebar mostra
+`build <APP_BUILD>` (constante em `assets/app.js`, exibida via
+`#sidebar-build` em `index.html`). Se a data não bater com o timestamp do
+último commit em `app.js`, é cache do navegador/CDN do GitHub Pages — peça
+um hard refresh (Ctrl+Shift+R), não mexa no `<script src>`.
 
 ### Hospedagem (GitHub Pages) e cache
 
