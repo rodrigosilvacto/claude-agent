@@ -38,6 +38,13 @@ function startOfWeek(d) {
   return addDays(d, -d.getDay());
 }
 
+// Horário cheio corrente, no mesmo formato de HORARIOS ("08:00") — usado
+// para destacar o horário atual e sinalizar horários já passados na
+// visão do dia. Comparação de string funciona pois o formato é fixo.
+function horaAtual() {
+  return `${String(new Date().getHours()).padStart(2, "0")}:00`;
+}
+
 async function loadClientes() {
   const { data } = await supabase.from("clientes").select("id, nome, documento").eq("ativo", true).eq("status_cadastro", "aprovado").order("nome", { ascending: true });
   return data || [];
@@ -183,6 +190,7 @@ function errorCard(message) {
 
 async function renderDia(body, anchor, onChange) {
   const key = toKey(anchor);
+  const isHoje = key === toKey(new Date());
   body.innerHTML = skeletonCard();
 
   let rows;
@@ -194,11 +202,24 @@ async function renderDia(body, anchor, onChange) {
   }
 
   const byHorario = new Map(rows.map((r) => [r.horario.slice(0, 5), r]));
+  const agora = isHoje ? horaAtual() : null;
+
+  const resumo = { agendado: 0, atendido: 0 };
+  rows.forEach((r) => resumo[r.status]++);
+  const livres = HORARIOS.length - rows.length;
 
   body.innerHTML = `
     <div class="card">
+      <div class="agenda-day__summary">
+        <span class="agenda-day__stat" style="--dot-color: var(--warning)">${resumo.agendado} agendado${resumo.agendado === 1 ? "" : "s"}</span>
+        <span class="agenda-day__stat" style="--dot-color: var(--success)">${resumo.atendido} atendido${resumo.atendido === 1 ? "" : "s"}</span>
+        <span class="agenda-day__stat" style="--dot-color: var(--text-muted)">${livres} livre${livres === 1 ? "" : "s"}</span>
+      </div>
       <div class="agenda-day">
-        ${HORARIOS.map((h) => slotHtml(h, byHorario.get(h))).join("")}
+        ${HORARIOS.map((h) => slotHtml(h, byHorario.get(h), {
+          isAgora: agora !== null && h === agora,
+          isPassado: agora !== null && h < agora,
+        })).join("")}
       </div>
     </div>
   `;
@@ -249,33 +270,43 @@ async function renderDia(body, anchor, onChange) {
   });
 }
 
-function slotHtml(hora, ag) {
+function slotHtml(hora, ag, { isAgora = false, isPassado = false } = {}) {
+  const agoraTag = isAgora ? `<span class="agenda-slot__agora">Agora</span>` : "";
+  const stateClasses = isAgora ? "agenda-slot--agora" : "";
+
   if (!ag) {
     return `
-      <div class="agenda-slot agenda-slot--livre">
-        <span class="agenda-slot__hora">${hora}</span>
+      <div class="agenda-slot cell-rail agenda-slot--livre ${isPassado ? "agenda-slot--passado" : ""} ${stateClasses}" style="--rail-color: var(--line-strong)">
+        <span class="agenda-slot__hora">${hora}${agoraTag}</span>
         <span class="agenda-slot__info cell-muted">Livre</span>
-        <button type="button" class="btn btn--ghost btn--sm" data-slot-livre="${hora}">+ Agendar</button>
+        <div class="agenda-slot__actions">
+          <button type="button" class="btn btn--ghost btn--sm" data-slot-livre="${hora}">+ Agendar</button>
+        </div>
       </div>
     `;
   }
 
   const atendido = ag.status === "atendido";
+  const atrasado = !atendido && isPassado;
   const detalhe = [ag.produto?.nome, ag.observacoes].filter(Boolean).join(" · ");
+  const railColor = atendido ? "var(--success)" : atrasado ? "var(--danger)" : "var(--warning)";
 
   return `
-    <div class="agenda-slot ${atendido ? "agenda-slot--atendido" : "agenda-slot--agendado"}">
-      <span class="agenda-slot__hora">${hora}</span>
+    <div class="agenda-slot cell-rail ${atendido ? "agenda-slot--atendido" : "agenda-slot--agendado"} ${stateClasses}" style="--rail-color: ${railColor}">
+      <span class="agenda-slot__hora">${hora}${agoraTag}</span>
       <div class="agenda-slot__info">
         <p class="agenda-slot__cliente">${escapeHtml(ag.cliente?.nome || "Sem cliente")}</p>
         ${detalhe ? `<p class="cell-muted agenda-slot__detalhe">${escapeHtml(detalhe)}</p>` : ""}
+        ${atrasado ? `<p class="agenda-slot__atraso">Horário já passou sem confirmação</p>` : ""}
       </div>
-      <span class="status status--${atendido ? "atendido" : "agendado"}">${atendido ? "Atendido" : "Agendado"}</span>
-      ${atendido ? "" : `
-        <button type="button" class="btn btn--primary btn--sm" data-atendido="${ag.id}">Atendido</button>
-        <button type="button" class="btn btn--ghost btn--sm" data-editar="${ag.id}">Editar</button>
-        <button type="button" class="btn btn--ghost btn--sm" data-excluir="${ag.id}">Excluir</button>
-      `}
+      <div class="agenda-slot__actions">
+        <span class="status status--${atendido ? "atendido" : "agendado"}">${atendido ? "Atendido" : "Agendado"}</span>
+        ${atendido ? "" : `
+          <button type="button" class="btn btn--primary btn--sm" data-atendido="${ag.id}">Atendido</button>
+          <button type="button" class="btn btn--ghost btn--sm" data-editar="${ag.id}">Editar</button>
+          <button type="button" class="btn btn--danger btn--sm" data-excluir="${ag.id}">Excluir</button>
+        `}
+      </div>
     </div>
   `;
 }
@@ -316,7 +347,10 @@ async function renderSemana(body, anchor, goToDay) {
                 ? '<p class="cell-muted agenda-week__empty">—</p>'
                 : items.map((r) => `
                   <button type="button" class="agenda-week__item ${r.status === "atendido" ? "is-atendido" : ""}" data-day-open="${key}">
-                    <span class="agenda-week__hora">${r.horario.slice(0, 5)}</span>
+                    <span class="agenda-week__row">
+                      <span class="agenda-week__dot"></span>
+                      <span class="agenda-week__hora">${r.horario.slice(0, 5)}</span>
+                    </span>
                     <span class="agenda-week__nome">${escapeHtml(r.cliente?.nome || "Sem cliente")}</span>
                   </button>
                 `).join("")}

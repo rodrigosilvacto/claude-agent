@@ -1288,7 +1288,38 @@ svg {
   margin: 0 0 0 0.3rem;
 }
 
-/* Dia: lista vertical de horários, cada um sua própria linha. */
+/* Dia: resumo do dia + lista vertical de horários, cada um sua linha.
+   Cada linha ganha uma rail de cor (mesmo padrão de .cell-rail usado nas
+   tabelas de Usuários/Cadastros) para status ser reconhecível de relance,
+   sem depender só do texto do selo. */
+
+.agenda-day__summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.1rem;
+  padding: 0 0.2rem 0.9rem;
+  margin-bottom: 0.4rem;
+  border-bottom: 1px solid var(--line);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.agenda-day__stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.agenda-day__stat::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--dot-color, var(--text-muted));
+  flex-shrink: 0;
+}
 
 .agenda-day {
   display: flex;
@@ -1300,7 +1331,7 @@ svg {
   align-items: center;
   flex-wrap: wrap;
   gap: 0.5rem 1rem;
-  padding: 0.85rem 0.2rem;
+  padding: 0.85rem 0.2rem 0.85rem 0.9rem;
   border-bottom: 1px solid var(--line);
 }
 
@@ -1314,6 +1345,17 @@ svg {
   font-size: 0.88rem;
   color: var(--text);
   flex: 0 0 56px;
+}
+
+.agenda-slot__agora {
+  display: block;
+  font-family: var(--font-sans);
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--accent-deep);
+  margin-top: 0.2rem;
 }
 
 .agenda-slot--livre .agenda-slot__hora {
@@ -1336,8 +1378,31 @@ svg {
   font-size: 0.8rem;
 }
 
+.agenda-slot__atraso {
+  margin: 0.15rem 0 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--danger-deep);
+}
+
 .agenda-slot--livre {
   opacity: 0.75;
+}
+
+.agenda-slot--passado.agenda-slot--livre {
+  opacity: 0.4;
+}
+
+.agenda-slot--agora {
+  background: var(--accent-soft);
+  border-radius: var(--radius-sm);
+}
+
+.agenda-slot__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
 /* Semana: 7 colunas, cada uma com um resumo compacto do dia. */
@@ -1421,6 +1486,24 @@ svg {
   background: var(--success-soft);
 }
 
+.agenda-week__row {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.agenda-week__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--warning);
+  flex-shrink: 0;
+}
+
+.agenda-week__item.is-atendido .agenda-week__dot {
+  background: var(--success);
+}
+
 .agenda-week__hora {
   font-family: var(--font-mono);
   font-size: 0.72rem;
@@ -1492,6 +1575,17 @@ svg {
   font-weight: 800;
   font-size: 0.9rem;
   color: var(--text);
+}
+
+.agenda-month__cell.is-today .agenda-month__daynum {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.7em;
+  height: 1.7em;
+  background: var(--accent);
+  color: #ffffff;
+  border-radius: 50%;
 }
 
 .agenda-month__badges {
@@ -1740,5 +1834,19 @@ svg {
 
   .venda-meta__data {
     flex: 1 1 auto;
+  }
+
+  .agenda-slot {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.35rem;
+  }
+
+  .agenda-slot__hora {
+    flex: none;
+  }
+
+  .agenda-slot__actions {
+    width: 100%;
   }
 }
