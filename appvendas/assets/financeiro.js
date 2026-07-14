@@ -5,7 +5,7 @@
 
 import { supabase } from "./supabaseClient.js";
 import { showToast, openModal, closeModal, confirmDialog, formatCurrency, formatDate, escapeHtml, createSearchSelect, registerAutoRefresh } from "./app.js";
-import { isAdmin } from "./auth.js";
+import { isAdmin, getCurrentEmpresaId } from "./auth.js";
 
 const FORMAS_PAGAMENTO = ["Dinheiro", "Pix", "Cartão de crédito", "Cartão de débito", "Boleto"];
 
@@ -278,6 +278,7 @@ function openRecebimentoForm(onSaved) {
         container: body.querySelector('[data-mount="cr-empresa"]'),
         placeholder: "Buscar empresa…",
         options: empresaSearchOptions(),
+        value: getCurrentEmpresaId(),
         allowClear: false,
       })
     : null;
