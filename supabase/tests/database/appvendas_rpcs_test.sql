@@ -1,7 +1,8 @@
--- Suíte mínima de testes (pgTAP) para as RPCs financeiras e o conflito de
--- horário da agenda — a lógica mais sensível do AppVendas e, até aqui, só
--- validada manualmente (ver backlog "Introduzir suíte mínima de teste para
--- RPCs financeiras e conflito de agenda").
+-- Suíte mínima de testes (pgTAP) para as RPCs financeiras (vendas,
+-- recebimentos manuais, contas a pagar) e o conflito de horário da agenda —
+-- a lógica mais sensível do AppVendas e, até aqui, só validada manualmente
+-- (ver backlog "Introduzir suíte mínima de teste para RPCs financeiras e
+-- conflito de agenda").
 --
 -- Como rodar:
 --   supabase test db
@@ -14,7 +15,7 @@
 -- SECURITY DEFINER e decidem a empresa a partir de current_empresa_id().
 begin;
 
-select plan(15);
+select plan(23);
 
 create schema if not exists tests;
 
@@ -59,6 +60,10 @@ insert into public.produtos (id, nome, sku, preco, estoque, empresa_id) values
 insert into public.clientes (id, nome, documento, empresa_id, status_cadastro) values
   ('00000000-0000-0000-0000-0000000ecaa1', 'Cliente A', '11111111111', '00000000-0000-0000-0000-00000000ea01', 'aprovado'),
   ('00000000-0000-0000-0000-0000000ecab1', 'Cliente B', '22222222222', '00000000-0000-0000-0000-00000000ea02', 'aprovado');
+
+insert into public.fornecedores (id, nome, empresa_id) values
+  ('00000000-0000-0000-0000-0000000ef0a1', 'Fornecedor A', '00000000-0000-0000-0000-00000000ea01'),
+  ('00000000-0000-0000-0000-0000000ef0b1', 'Fornecedor B', '00000000-0000-0000-0000-00000000ea02');
 
 -- ── criar_venda: baixa de estoque e total ────────────────────────────────
 
@@ -181,6 +186,64 @@ select lives_ok(
   $$ insert into public.agendamentos (produto_id, data_agendamento, horario, empresa_id)
      values ('00000000-0000-0000-0000-0000000ea1b1', current_date + 7, '09:00', '00000000-0000-0000-0000-00000000ea02') $$,
   'agendamentos: o mesmo horário no mesmo dia em OUTRA empresa é permitido'
+);
+
+-- ── criar_conta_pagar / registrar_pagamento_conta_pagar / cancelar_conta_pagar
+
+select tests.set_auth('00000000-0000-0000-0000-0000000000a1');
+
+select public.criar_conta_pagar(
+  '00000000-0000-0000-0000-0000000ef0a1', 'Compra de mercadorias', 500.00, current_date + 15
+) \gset cp_
+
+select is(
+  (select status from public.contas_pagar where id = :'cp_criar_conta_pagar'),
+  'pendente',
+  'criar_conta_pagar: conta nasce com status pendente'
+);
+
+select throws_ok(
+  $$ select public.criar_conta_pagar(
+       '00000000-0000-0000-0000-0000000ef0b1', 'Fornecedor de outra empresa', 100.00, current_date + 10
+     ) $$,
+  'criar_conta_pagar: rejeita fornecedor de outra empresa (isolamento multiempresa)'
+);
+
+select lives_ok(
+  format('select public.registrar_pagamento_conta_pagar(%L)', :'cp_criar_conta_pagar'),
+  'registrar_pagamento_conta_pagar: registra o pagamento de uma conta pendente'
+);
+
+select is(
+  (select status from public.contas_pagar where id = :'cp_criar_conta_pagar'),
+  'pago',
+  'registrar_pagamento_conta_pagar: status vira pago'
+);
+
+select throws_ok(
+  format('select public.registrar_pagamento_conta_pagar(%L)', :'cp_criar_conta_pagar'),
+  'registrar_pagamento_conta_pagar: rejeita pagar uma conta que já foi paga'
+);
+
+select public.criar_conta_pagar(
+  '00000000-0000-0000-0000-0000000ef0a1', 'Segunda conta', 200.00, current_date + 20
+) \gset cp2_
+
+select lives_ok(
+  format('select public.cancelar_conta_pagar(%L)', :'cp2_criar_conta_pagar'),
+  'cancelar_conta_pagar: cancela uma conta pendente da própria empresa'
+);
+
+select lives_ok(
+  format('select public.cancelar_conta_pagar(%L)', :'cp2_criar_conta_pagar'),
+  'cancelar_conta_pagar: chamar de novo numa conta já cancelada não faz nada (idempotente)'
+);
+
+select tests.set_auth('00000000-0000-0000-0000-0000000000b1');
+
+select throws_ok(
+  format('select public.cancelar_conta_pagar(%L)', :'cp2_criar_conta_pagar'),
+  'cancelar_conta_pagar: caixa de outra empresa não pode cancelar a conta'
 );
 
 select * from finish();

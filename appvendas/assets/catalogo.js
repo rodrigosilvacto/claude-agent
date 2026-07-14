@@ -30,6 +30,25 @@ export async function loadEmpresasAtivas() {
   return data || [];
 }
 
+// Fornecedores não têm um dono único fixo por tela (Produtos filtra pelo
+// formulário; Contas a Pagar filtra pelo período) — por isso recebe o
+// empresa_id explícito em vez de resolver isAdmin()/getCurrentEmpresaId()
+// sozinho, do jeito que loadEmpresasAtivas faz.
+export async function loadFornecedoresPorEmpresa(empresaId) {
+  if (!empresaId) return [];
+  const { data } = await supabase
+    .from("fornecedores")
+    .select("id, nome")
+    .eq("empresa_id", empresaId)
+    .eq("ativo", true)
+    .order("nome", { ascending: true });
+  return data || [];
+}
+
+export function fornecedorSearchOptions(fornecedores) {
+  return fornecedores.map((f) => ({ value: f.id, label: f.nome }));
+}
+
 export function clienteSearchOptions(clientes) {
   return clientes.map((c) => ({ value: c.id, label: c.nome, meta: c.documento || "" }));
 }
