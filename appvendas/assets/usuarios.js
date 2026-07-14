@@ -1,4 +1,4 @@
-// AppVendas — cadastro de usuários (somente administradores acessam esta
+// BjjConnect — cadastro de usuários (somente administradores acessam esta
 // tela; a rota já é bloqueada em app.js, mas as ações também são
 // re-validadas do lado do servidor pela edge function manage-usuarios).
 

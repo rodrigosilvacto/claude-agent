@@ -123,7 +123,7 @@ alter table public.clientes add column empresa_id uuid references public.empresa
 alter table public.produtos add column empresa_id uuid references public.empresas(id);
 alter table public.fornecedores add column empresa_id uuid references public.empresas(id);
 alter table public.vendas add column empresa_id uuid references public.empresas(id);
-alter table public.agendamentos_placeholder_note is null; -- ver tabela agendamentos abaixo
+-- (agendamentos ganha empresa_id na própria criação da tabela, mais abaixo)
 
 alter table public.clientes alter column empresa_id set not null;
 alter table public.produtos alter column empresa_id set not null;
@@ -284,6 +284,14 @@ create policy "agendamentos_authenticated" on public.agendamentos for all to aut
 -- ── criar_venda / cancelar_venda: versão com p_empresa_id ───────────────
 -- Bug histórico (corrigido em 0006): recriar a função com uma assinatura
 -- nova reabriu o EXECUTE padrão para o papel `anon`.
+--
+-- A assinatura de 6 argumentos criada em 0004 precisa ser removida
+-- explicitamente: como o novo p_empresa_id tem default, "create or replace"
+-- não substitui a versão antiga — cria uma segunda função sobrecarregada, e
+-- chamadas com 6 argumentos passam a ser ambíguas (foi exatamente isso que
+-- a migração real "drop_stale_criar_venda_overload" corrigiu em produção).
+drop function if exists public.criar_venda(uuid, date, text, text, numeric, jsonb);
+
 create or replace function public.criar_venda(
   p_cliente_id uuid,
   p_data_venda date,
@@ -410,9 +418,8 @@ create index produtos_empresa_id_idx on public.produtos (empresa_id);
 create index fornecedores_empresa_id_idx on public.fornecedores (empresa_id);
 create index vendas_empresa_id_idx on public.vendas (empresa_id);
 
--- Bug histórico (corrigido em 0006): faltava empresa_id neste índice, então
--- um SKU usado por uma empresa ficava indisponível para as demais.
-create unique index produtos_sku_idx on public.produtos (sku) where sku is not null and sku <> '';
+-- (produtos_sku_idx já existe desde 0004, sem empresa_id — bug histórico
+-- corrigido em 0006, que dropa e recria o índice; nada a fazer aqui)
 
 -- ── Recebimentos manuais (Financeiro > Contas a Receber) ────────────────
 create table public.recebimentos (

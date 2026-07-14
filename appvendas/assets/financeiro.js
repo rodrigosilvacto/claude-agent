@@ -1,4 +1,4 @@
-// AppVendas — Financeiro > Contas a Receber: lista tudo que foi recebido no
+// BjjConnect — Financeiro > Contas a Receber: lista tudo que foi recebido no
 // período (vendas confirmadas + lançamentos manuais) e permite registrar um
 // recebimento manual avulso (além de vendas), que também exige um produto e
 // reduz o estoque dele — mesmo padrão de criar_venda/cancelar_venda.

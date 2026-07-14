@@ -1,4 +1,4 @@
-// AppVendas — shell: roteamento por hash + utilitários compartilhados
+// BjjConnect — shell: roteamento por hash + utilitários compartilhados
 // (toast, modal, confirmação, formatação). Cada módulo de tela expõe
 // `render(view)` e monta seu próprio HTML dentro do container recebido.
 
@@ -12,7 +12,7 @@ import { initAuth, isLoggedIn, isAdmin, getCurrentUsuario, signOut, onAuthChange
 // ES modules carregar duas instâncias do módulo (hashchange listener e
 // boot() duplicados). Ver commit e4f8448 (correção original) e 3659424/
 // e75bd3a (reintrodução e reversão do bug).
-export const APP_BUILD = "2026-07-14 13:25 -03";
+export const APP_BUILD = "2026-07-14 14:25 -03";
 
 const ROUTES = {
   home: {
@@ -42,7 +42,7 @@ const ROUTES = {
   },
   agenda: {
     breadcrumb: "Movimentações",
-    title: "Agendamento",
+    title: "Agenda",
     load: () => import("./agenda.js"),
   },
   "contas-receber": {

@@ -1,4 +1,4 @@
-// AppVendas — carregamento de catálogo (clientes ativos, produtos ativos,
+// BjjConnect — carregamento de catálogo (clientes ativos, produtos ativos,
 // empresas) e mapeamento para o combo de busca (createSearchSelect). Extraído
 // de vendas.js/financeiro.js/agenda.js, que reimplementavam a mesma consulta
 // e o mesmo mapeamento de forma quase idêntica em cada tela.

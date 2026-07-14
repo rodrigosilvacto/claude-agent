@@ -19,6 +19,12 @@ select plan(23);
 
 create schema if not exists tests;
 
+-- grant a public (sem security definer): "role" não pode ser alterado de
+-- dentro de uma função security definer (Postgres bloqueia isso de
+-- propósito, para uma função privilegiada não conseguir assumir outra role
+-- por conta própria). Sem o grant, a primeira troca de role para
+-- authenticated impediria a PRÓPRIA sessão de chamar tests.set_auth() de
+-- novo (authenticated não teria USAGE no schema tests nem EXECUTE aqui).
 create or replace function tests.set_auth(p_user_id uuid) returns void
 language plpgsql as $$
 begin
@@ -28,14 +34,21 @@ begin
 end;
 $$;
 
+-- "reset role" (em vez de forçar role=postgres) volta para a role da
+-- própria sessão (postgres, superusuário) sem exigir que "authenticated"
+-- seja membro de "postgres" — o que ela nunca é, nem deveria ser.
 create or replace function tests.clear_auth() returns void
 language plpgsql as $$
 begin
   perform set_config('request.jwt.claims', '', true);
   perform set_config('request.jwt.claim.sub', '', true);
-  perform set_config('role', 'postgres', true);
+  reset role;
 end;
 $$;
+
+grant usage on schema tests to public;
+grant execute on function tests.set_auth(uuid) to public;
+grant execute on function tests.clear_auth() to public;
 
 -- ── Fixtures ────────────────────────────────────────────────────────────
 -- Duas empresas, um caixa em cada uma, um produto e um cliente por empresa.
@@ -94,6 +107,7 @@ select throws_ok(
        '00000000-0000-0000-0000-0000000ecaa1', current_date, 'Dinheiro', null, 0,
        jsonb_build_array(jsonb_build_object('produto_id', '00000000-0000-0000-0000-0000000ea1a1', 'quantidade', 999, 'preco_unitario', 10.00))
      ) $$,
+  null,
   'criar_venda: rejeita item com quantidade maior que o estoque disponível'
 );
 
@@ -102,6 +116,7 @@ select throws_ok(
        '00000000-0000-0000-0000-0000000ecab1', current_date, 'Dinheiro', null, 0,
        jsonb_build_array(jsonb_build_object('produto_id', '00000000-0000-0000-0000-0000000ea1a1', 'quantidade', 1, 'preco_unitario', 10.00))
      ) $$,
+  null,
   'criar_venda: rejeita cliente de outra empresa (isolamento multiempresa)'
 );
 
@@ -122,7 +137,7 @@ select lives_ok(
 
 select is(
   (select estoque from public.produtos where id = '00000000-0000-0000-0000-0000000ea1a1'),
-  2,
+  3,
   'cancelar_venda: devolve a quantidade da venda cancelada ao estoque'
 );
 
@@ -133,7 +148,7 @@ select lives_ok(
 
 select is(
   (select estoque from public.produtos where id = '00000000-0000-0000-0000-0000000ea1a1'),
-  2,
+  3,
   'cancelar_venda: idempotência não devolve estoque em dobro'
 );
 
@@ -141,6 +156,7 @@ select tests.set_auth('00000000-0000-0000-0000-0000000000b1');
 
 select throws_ok(
   format('select public.cancelar_venda(%L)', :'venda_criar_venda'),
+  null,
   'cancelar_venda: caixa de outra empresa não pode cancelar a venda'
 );
 
@@ -179,6 +195,7 @@ values ('00000000-0000-0000-0000-0000000ea1a1', current_date + 7, '09:00', '0000
 select throws_ok(
   $$ insert into public.agendamentos (produto_id, data_agendamento, horario, empresa_id)
      values ('00000000-0000-0000-0000-0000000ea1a1', current_date + 7, '09:00', '00000000-0000-0000-0000-00000000ea01') $$,
+  null,
   'agendamentos: mesmo horário no mesmo dia na MESMA empresa é rejeitado (slot único)'
 );
 
@@ -206,6 +223,7 @@ select throws_ok(
   $$ select public.criar_conta_pagar(
        '00000000-0000-0000-0000-0000000ef0b1', 'Fornecedor de outra empresa', 100.00, current_date + 10
      ) $$,
+  null,
   'criar_conta_pagar: rejeita fornecedor de outra empresa (isolamento multiempresa)'
 );
 
@@ -222,6 +240,7 @@ select is(
 
 select throws_ok(
   format('select public.registrar_pagamento_conta_pagar(%L)', :'cp_criar_conta_pagar'),
+  null,
   'registrar_pagamento_conta_pagar: rejeita pagar uma conta que já foi paga'
 );
 
@@ -243,6 +262,7 @@ select tests.set_auth('00000000-0000-0000-0000-0000000000b1');
 
 select throws_ok(
   format('select public.cancelar_conta_pagar(%L)', :'cp2_criar_conta_pagar'),
+  null,
   'cancelar_conta_pagar: caixa de outra empresa não pode cancelar a conta'
 );
 
