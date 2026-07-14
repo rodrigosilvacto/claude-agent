@@ -14,6 +14,7 @@ export async function render(view, actionsEl) {
     searchPlaceholder: "Buscar por nome, SKU ou categoria…",
     searchColumns: ["nome", "sku", "categoria"],
     orderBy: "nome",
+    scopeByEmpresa: true,
     selectQuery: "*, fornecedor:fornecedores(id, nome)",
     columns: [
       { key: "nome", label: "Nome" },

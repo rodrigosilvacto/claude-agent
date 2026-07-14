@@ -30,7 +30,7 @@ async function loadUsuario(userId) {
   if (!userId) return null;
   const { data } = await supabase
     .from("usuarios")
-    .select("id, nome, login, role, ativo")
+    .select("id, nome, login, role, ativo, empresa_id")
     .eq("id", userId)
     .maybeSingle();
   return data || null;
@@ -151,6 +151,10 @@ export function isLoggedIn() {
 
 export function isAdmin() {
   return Boolean(currentUsuario && currentUsuario.role === "admin" && currentUsuario.ativo);
+}
+
+export function getCurrentEmpresaId() {
+  return currentUsuario ? currentUsuario.empresa_id ?? null : null;
 }
 
 export async function signIn(login, senha) {

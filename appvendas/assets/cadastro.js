@@ -6,10 +6,43 @@
 import { supabase } from "./supabaseClient.js";
 import { showToast, openModal, closeModal, confirmDialog, escapeHtml, skeletonTable, createSearchSelect, registerAutoRefresh } from "./app.js";
 import { consultarCep } from "./cep.js";
+import { isAdmin } from "./auth.js";
 
 const SEARCH_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>';
 
-export async function renderCadastro(view, actionsEl, config) {
+// Telas marcadas com `scopeByEmpresa: true` (Clientes, Produtos,
+// Fornecedores) ganham, só para administradores, um campo "Empresa"
+// obrigatório no formulário e uma coluna correspondente na listagem — quem
+// não é admin nunca vê nem um nem outro, e o INSERT sem empresa_id é
+// preenchido pelo trigger set_empresa_id() no banco.
+async function loadEmpresasOptions() {
+  const { data } = await supabase
+    .from("empresas")
+    .select("id, nome_fantasia, codigo")
+    .eq("ativo", true)
+    .order("nome_fantasia", { ascending: true });
+  return (data || []).map((e) => ({ value: e.id, label: e.nome_fantasia, meta: e.codigo }));
+}
+
+function withEmpresaScope(rawConfig) {
+  if (!rawConfig.scopeByEmpresa || !isAdmin()) return rawConfig;
+
+  return {
+    ...rawConfig,
+    selectQuery: `${rawConfig.selectQuery || "*"}, empresa:empresas(nome_fantasia)`,
+    columns: [
+      ...rawConfig.columns,
+      { key: "empresa", label: "Empresa", render: (row) => escapeHtml(row.empresa?.nome_fantasia || "—") },
+    ],
+    fields: [
+      ...rawConfig.fields,
+      { key: "empresa_id", label: "Empresa", type: "search-select", required: true, full: true, optionsLoader: loadEmpresasOptions },
+    ],
+  };
+}
+
+export async function renderCadastro(view, actionsEl, rawConfig) {
+  const config = withEmpresaScope(rawConfig);
   actionsEl.innerHTML = `<button type="button" class="btn btn--primary" id="btn-new">+ Novo ${escapeHtml(config.titleSingular)}</button>`;
   view.innerHTML = `
     <div class="toolbar">

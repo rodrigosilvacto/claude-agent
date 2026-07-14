@@ -62,6 +62,7 @@ form.addEventListener("submit", async (e) => {
     p_cidade: form.elements.cidade.value || null,
     p_uf: form.elements.uf.value || null,
     p_endereco: form.elements.endereco.value || null,
+    p_empresa_codigo: new URLSearchParams(window.location.search).get("empresa") || null,
   };
 
   const { data, error } = await supabase.rpc("pre_cadastro_cliente", payload);

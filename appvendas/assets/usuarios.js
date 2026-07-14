@@ -4,7 +4,16 @@
 
 import { supabase } from "./supabaseClient.js";
 import { callManageUsuarios, getCurrentUsuario } from "./auth.js";
-import { showToast, openModal, closeModal, confirmDialog, escapeHtml, skeletonTable, registerAutoRefresh } from "./app.js";
+import { showToast, openModal, closeModal, confirmDialog, escapeHtml, skeletonTable, registerAutoRefresh, createSearchSelect } from "./app.js";
+
+async function loadEmpresasOptions() {
+  const { data } = await supabase
+    .from("empresas")
+    .select("id, nome_fantasia, codigo")
+    .eq("ativo", true)
+    .order("nome_fantasia", { ascending: true });
+  return (data || []).map((e) => ({ value: e.id, label: e.nome_fantasia, meta: e.codigo }));
+}
 
 const SEARCH_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>';
 
@@ -52,7 +61,7 @@ async function loadRows(view, term) {
 
   const { data, error } = await supabase
     .from("usuarios")
-    .select("id, nome, login, role, ativo, created_at")
+    .select("id, nome, login, role, ativo, created_at, empresa:empresas(nome_fantasia)")
     .order("nome", { ascending: true });
 
   const card = view.querySelector(".card");
@@ -91,6 +100,7 @@ function renderTable(view, card, data) {
       <td class="cell-rail" style="--rail-color: var(${row.ativo ? "--success" : "--text-muted"})">${escapeHtml(row.nome)}${isSelf ? ' <span class="cell-muted">(você)</span>' : ""}</td>
       <td>${escapeHtml(row.login)}</td>
       <td><span class="status status--${row.role}">${roleLabel(row.role)}</span></td>
+      <td>${escapeHtml(row.empresa?.nome_fantasia || "—")}</td>
       <td><span class="status status--${row.ativo ? "ativo" : "inativo"}">${row.ativo ? "Ativo" : "Inativo"}</span></td>
       <td class="cell-actions">
         <button type="button" class="btn btn--ghost btn--sm" data-edit="${row.id}">Editar</button>
@@ -104,7 +114,7 @@ function renderTable(view, card, data) {
   card.innerHTML = `
     <div class="table-wrap">
       <table class="data-table">
-        <thead><tr><th>Nome</th><th>Usuário</th><th>Papel</th><th>Status</th><th></th></tr></thead>
+        <thead><tr><th>Nome</th><th>Usuário</th><th>Papel</th><th>Empresa</th><th>Status</th><th></th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>
@@ -146,6 +156,7 @@ async function openForm(existingRow, onSaved) {
   const me = getCurrentUsuario();
   const isSelf = isEdit && Boolean(me && me.id === existingRow.id);
   const body = openModal(isEdit ? "Editar usuário" : "Novo usuário");
+  const empresasOptions = await loadEmpresasOptions();
 
   body.innerHTML = `
     <form id="usuario-form">
@@ -173,6 +184,10 @@ async function openForm(existingRow, onSaved) {
             <button type="button" class="segmented__btn ${existingRow?.role === "admin" ? "is-active" : ""}" data-value="admin" role="radio" aria-checked="${existingRow?.role === "admin"}" ${isSelf ? "disabled" : ""}>Administrador</button>
           </div>
         </div>
+        <div class="field field--full">
+          <label>Empresa<span class="field-required" id="f-empresa-required">*</span></label>
+          <div data-mount="f-empresa"></div>
+        </div>
         ${isEdit ? `
         <div class="field field--full">
           <label><input type="checkbox" name="ativo" ${existingRow.ativo ? "checked" : ""} ${isSelf ? "disabled" : ""} /> Usuário ativo</label>
@@ -187,7 +202,22 @@ async function openForm(existingRow, onSaved) {
     </form>
   `;
 
+  const empresaSelect = createSearchSelect({
+    container: body.querySelector('[data-mount="f-empresa"]'),
+    placeholder: "Buscar empresa…",
+    options: empresasOptions,
+    value: existingRow?.empresa_id ?? null,
+    allowClear: true,
+  });
+
+  const empresaRequiredMark = body.querySelector("#f-empresa-required");
+
   let role = existingRow?.role ?? "caixa";
+  function updateEmpresaRequiredMark() {
+    empresaRequiredMark.hidden = role === "admin";
+  }
+  updateEmpresaRequiredMark();
+
   const roleGroup = body.querySelector("#f-role");
   roleGroup.addEventListener("click", (e) => {
     const btn = e.target.closest("[data-value]");
@@ -198,6 +228,7 @@ async function openForm(existingRow, onSaved) {
       b.classList.toggle("is-active", active);
       b.setAttribute("aria-checked", String(active));
     });
+    updateEmpresaRequiredMark();
   });
 
   body.querySelector("#btn-cancel").addEventListener("click", closeModal);
@@ -208,9 +239,15 @@ async function openForm(existingRow, onSaved) {
     const errorEl = form.querySelector("#form-error");
     errorEl.innerHTML = "";
 
+    const empresaId = empresaSelect.getValue();
+    if (role !== "admin" && !empresaId) {
+      errorEl.innerHTML = `<div class="form-error">Selecione uma empresa para este usuário.</div>`;
+      return;
+    }
+
     try {
       if (isEdit) {
-        const payload = { id: existingRow.id, nome: form.elements.nome.value.trim(), role };
+        const payload = { id: existingRow.id, nome: form.elements.nome.value.trim(), role, empresa_id: empresaId };
         if (!isSelf) payload.ativo = form.elements.ativo.checked;
         const { usuario } = await callManageUsuarios("update", payload);
         showToast(`Usuário ${usuario.nome} atualizado.`);
@@ -220,6 +257,7 @@ async function openForm(existingRow, onSaved) {
           login: form.elements.login.value.trim(),
           senha: form.elements.senha.value,
           role,
+          empresa_id: empresaId,
         };
         const { usuario } = await callManageUsuarios("create", payload);
         showToast(`Usuário ${usuario.nome} cadastrado.`);

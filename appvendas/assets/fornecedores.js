@@ -7,6 +7,7 @@ export async function render(view, actionsEl) {
     searchPlaceholder: "Buscar por nome, documento ou cidade…",
     searchColumns: ["nome", "documento", "cidade"],
     orderBy: "nome",
+    scopeByEmpresa: true,
     columns: [
       { key: "nome", label: "Nome" },
       { key: "documento", label: "CNPJ" },

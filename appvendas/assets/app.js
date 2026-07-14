@@ -50,6 +50,12 @@ const ROUTES = {
     title: "Visão geral",
     load: () => import("./relatorios.js"),
   },
+  empresas: {
+    breadcrumb: "Administração",
+    title: "Empresas",
+    load: () => import("./empresas.js"),
+    adminOnly: true,
+  },
   usuarios: {
     breadcrumb: "Administração",
     title: "Usuários",
@@ -66,6 +72,7 @@ const titleEl = document.getElementById("page-title");
 const topbarActionsEl = document.getElementById("topbar-actions");
 const navLinks = Array.from(document.querySelectorAll(".nav-link"));
 const navUsuarios = document.getElementById("nav-usuarios");
+const navEmpresas = document.getElementById("nav-empresas");
 const userChipAvatar = document.getElementById("user-chip-avatar");
 const userChipName = document.getElementById("user-chip-name");
 const userChipMeta = document.getElementById("user-chip-meta");
@@ -89,6 +96,7 @@ function updateAuthUI() {
 
   appShell.classList.toggle("is-locked", !logged);
   navUsuarios.hidden = !isAdmin();
+  navEmpresas.hidden = !isAdmin();
 
   if (usuario) {
     userChipAvatar.textContent = initials(usuario.nome);
@@ -374,13 +382,13 @@ export function createSearchSelect({
     });
   }
 
-  function pick(opt) {
+  function pick(opt, { silent = false } = {}) {
     selected = opt || null;
     input.value = opt ? opt.label : "";
     container.classList.toggle("has-value", Boolean(opt));
     clearBtn.hidden = !allowClear || !opt;
     closePanel();
-    onChange(opt ? opt.value : null, opt);
+    if (!silent) onChange(opt ? opt.value : null, opt);
   }
 
   input.addEventListener("focus", openPanel);
@@ -429,7 +437,7 @@ export function createSearchSelect({
 
   if (value != null) {
     const initial = findOption(value);
-    if (initial) pick(initial);
+    if (initial) pick(initial, { silent: true });
   }
 
   return {

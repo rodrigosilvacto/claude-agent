@@ -8,6 +8,16 @@
 
 import { supabase } from "./supabaseClient.js";
 import { showToast, openModal, closeModal, confirmDialog, escapeHtml, createSearchSelect, registerAutoRefresh, setVendaPrefill } from "./app.js";
+import { isAdmin } from "./auth.js";
+
+async function loadEmpresasOptions() {
+  const { data } = await supabase
+    .from("empresas")
+    .select("id, nome_fantasia, codigo")
+    .eq("ativo", true)
+    .order("nome_fantasia", { ascending: true });
+  return (data || []).map((e) => ({ value: e.id, label: e.nome_fantasia, meta: e.codigo }));
+}
 
 // Horário de atendimento padrão da loja — ajuste aqui se mudar.
 const HORARIOS = ["08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00"];
@@ -61,7 +71,7 @@ async function loadProdutos() {
 async function loadAgendamentos(startKey, endKey) {
   const { data, error } = await supabase
     .from("agendamentos")
-    .select("id, data_agendamento, horario, status, observacoes, cliente_id, produto_id, cliente:clientes(nome), produto:produtos(nome)")
+    .select("id, data_agendamento, horario, status, observacoes, cliente_id, produto_id, empresa_id, cliente:clientes(nome), produto:produtos(nome)")
     .gte("data_agendamento", startKey)
     .lte("data_agendamento", endKey)
     .order("horario", { ascending: true });
@@ -239,6 +249,7 @@ async function renderDia(body, anchor, onChange) {
         id: ag.id,
         clienteId: ag.cliente_id,
         produtoId: ag.produto_id,
+        empresaId: ag.empresa_id,
         data: ag.data_agendamento,
         horario: ag.horario.slice(0, 5),
         observacoes: ag.observacoes || "",
@@ -429,14 +440,22 @@ async function renderMes(body, anchor, goToDay) {
 
 // ── Modal de novo agendamento / edição ──────────────────────────────
 
-async function openAgendamentoForm({ id = null, clienteId = null, produtoId = null, data, horario, observacoes = "" } = {}, onSaved) {
+async function openAgendamentoForm({ id = null, clienteId = null, produtoId = null, empresaId = null, data, horario, observacoes = "" } = {}, onSaved) {
   const editando = Boolean(id);
+  const admin = isAdmin();
   const body = openModal(editando ? "Editar agendamento" : "Novo agendamento");
+  const empresasOptions = admin ? await loadEmpresasOptions() : [];
 
   body.innerHTML = `
     <form id="agenda-form">
       <div id="agenda-form-error"></div>
       <div class="form-grid">
+        ${admin ? `
+        <div class="field field--full">
+          <label>Empresa${'<span class="field-required">*</span>'}</label>
+          <div data-mount="ag-empresa"></div>
+        </div>
+        ` : ""}
         <div class="field field--full">
           <label>Cliente <span class="field-optional">opcional</span></label>
           <div data-mount="ag-cliente"></div>
@@ -465,6 +484,17 @@ async function openAgendamentoForm({ id = null, clienteId = null, produtoId = nu
     </form>
   `;
 
+  const empresaSelect = admin
+    ? createSearchSelect({
+        container: body.querySelector('[data-mount="ag-empresa"]'),
+        placeholder: "Buscar empresa…",
+        options: empresasOptions,
+        value: empresaId,
+        allowClear: false,
+        onChange: () => refreshHorarios(),
+      })
+    : null;
+
   const clienteSelect = createSearchSelect({
     container: body.querySelector('[data-mount="ag-cliente"]'),
     placeholder: "Buscar cliente por nome ou documento… (opcional)",
@@ -486,8 +516,12 @@ async function openAgendamentoForm({ id = null, clienteId = null, produtoId = nu
 
   async function refreshHorarios(preferido) {
     let ocupados = new Set();
-    if (dataInput.value) {
+    // Para admin, os horários ocupados são por empresa selecionada — cada
+    // empresa tem sua própria agenda independente. Para quem não é admin, a
+    // RLS já restringe a consulta à própria empresa.
+    if (dataInput.value && !(admin && !empresaSelect.getValue())) {
       let query = supabase.from("agendamentos").select("horario").eq("data_agendamento", dataInput.value);
+      if (admin) query = query.eq("empresa_id", empresaSelect.getValue());
       if (editando) query = query.neq("id", id);
       const { data: rows } = await query;
       ocupados = new Set((rows || []).map((r) => r.horario.slice(0, 5)));
@@ -514,6 +548,11 @@ async function openAgendamentoForm({ id = null, clienteId = null, produtoId = nu
       return;
     }
 
+    if (admin && !empresaSelect.getValue()) {
+      errorEl.innerHTML = `<div class="form-error">Selecione uma empresa.</div>`;
+      return;
+    }
+
     const payload = {
       cliente_id: clienteSelect.getValue() || null,
       produto_id: produtoIdSelecionado,
@@ -521,6 +560,7 @@ async function openAgendamentoForm({ id = null, clienteId = null, produtoId = nu
       horario: horarioSelect.value,
       observacoes: body.querySelector("#ag-obs").value || null,
     };
+    if (admin) payload.empresa_id = empresaSelect.getValue();
 
     const { error } = editando
       ? await supabase.from("agendamentos").update(payload).eq("id", id)

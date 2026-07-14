@@ -1,6 +1,7 @@
 import { renderCadastro } from "./cadastro.js";
 import { supabase } from "./supabaseClient.js";
 import { showToast } from "./app.js";
+import { getCurrentEmpresaId } from "./auth.js";
 
 const SITUACAO_LABEL = { pendente: "Pendente", aprovado: "Aprovado", reprovado: "Reprovado" };
 
@@ -11,6 +12,7 @@ export async function render(view, actionsEl) {
     searchPlaceholder: "Buscar por nome, documento ou cidade…",
     searchColumns: ["nome", "documento", "cidade"],
     orderBy: "nome",
+    scopeByEmpresa: true,
     columns: [
       { key: "nome", label: "Nome" },
       { key: "documento", label: "Documento" },
@@ -63,7 +65,13 @@ export async function render(view, actionsEl) {
   actionsEl.insertAdjacentHTML("afterbegin", `<button type="button" class="btn btn--ghost" id="btn-copy-precadastro">Copiar link de pré-cadastro</button>`);
   actionsEl.querySelector("#btn-copy-precadastro").addEventListener("click", async () => {
     const basePath = window.location.pathname.replace(/[^/]*$/, "");
-    const url = `${window.location.origin}${basePath}pre-cadastro.html`;
+    let query = "";
+    const empresaId = getCurrentEmpresaId();
+    if (empresaId) {
+      const { data: empresa } = await supabase.from("empresas").select("codigo").eq("id", empresaId).maybeSingle();
+      if (empresa?.codigo) query = `?empresa=${encodeURIComponent(empresa.codigo)}`;
+    }
+    const url = `${window.location.origin}${basePath}pre-cadastro.html${query}`;
     try {
       await navigator.clipboard.writeText(url);
       showToast("Link de pré-cadastro copiado.");

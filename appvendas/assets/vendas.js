@@ -1,5 +1,6 @@
 import { supabase } from "./supabaseClient.js";
 import { showToast, openModal, confirmDialog, formatCurrency, formatDate, formatDateTime, escapeHtml, createSearchSelect, registerAutoRefresh, consumeVendaPrefill } from "./app.js";
+import { isAdmin } from "./auth.js";
 
 // Cada forma de pagamento vira um "tile" com ícone no fechamento da venda —
 // em vez de uma fileira de pílulas de texto (que não cabiam lado a lado e
@@ -30,6 +31,7 @@ const FORMAS_PAGAMENTO = [
 
 let clientesOptions = [];
 let produtosOptions = [];
+let empresasOptions = [];
 let cart = [];
 // Id do agendamento que originou a venda em andamento (fluxo Agenda → Vendas,
 // via setVendaPrefill/consumeVendaPrefill em app.js). Null numa venda avulsa.
@@ -64,7 +66,7 @@ export async function render(view, actionsEl) {
   tabNova.addEventListener("click", () => activate("nova"));
   tabHistorico.addEventListener("click", () => activate("historico"));
 
-  [clientesOptions, produtosOptions] = await Promise.all([loadClientes(), loadProdutos()]);
+  [clientesOptions, produtosOptions, empresasOptions] = await Promise.all([loadClientes(), loadProdutos(), loadEmpresas()]);
 
   activate("nova");
 }
@@ -77,6 +79,16 @@ async function loadClientes() {
 async function loadProdutos() {
   const { data } = await supabase.from("produtos").select("id, nome, sku, preco, estoque").eq("ativo", true).order("nome", { ascending: true });
   return data || [];
+}
+
+async function loadEmpresas() {
+  if (!isAdmin()) return [];
+  const { data } = await supabase.from("empresas").select("id, nome_fantasia, codigo").eq("ativo", true).order("nome_fantasia", { ascending: true });
+  return data || [];
+}
+
+function empresaSearchOptions() {
+  return empresasOptions.map((e) => ({ value: e.id, label: e.nome_fantasia, meta: e.codigo }));
 }
 
 function clienteSearchOptions() {
@@ -94,6 +106,7 @@ function produtoSearchOptions() {
 function renderNovaVenda(content) {
   const prefill = consumeVendaPrefill();
   agendamentoOrigemId = prefill?.agendamentoId || null;
+  const admin = isAdmin();
 
   content.innerHTML = `
     <div class="venda-layout">
@@ -101,6 +114,12 @@ function renderNovaVenda(content) {
         ${prefill ? `
           <div class="form-info">
             Confirmando venda do atendimento de ${escapeHtml(prefill.clienteNome || "cliente sem cadastro")} em ${formatDate(prefill.dataAgendamento)} às ${prefill.horario}. Revise os dados e finalize para registrar a venda.
+          </div>
+        ` : ""}
+        ${admin ? `
+          <div class="field">
+            <label>Empresa<span class="field-required">*</span></label>
+            <div data-mount="v-empresa"></div>
           </div>
         ` : ""}
         <div class="venda-meta">
@@ -202,6 +221,15 @@ function renderNovaVenda(content) {
     obsInput.value = `Venda referente ao atendimento agendado em ${formatDate(prefill.dataAgendamento)} às ${prefill.horario}.${prefill.observacoes ? ` Obs. do agendamento: ${prefill.observacoes}` : ""}`;
   }
 
+  const empresaSelect = admin
+    ? createSearchSelect({
+        container: content.querySelector('[data-mount="v-empresa"]'),
+        placeholder: "Buscar empresa…",
+        options: empresaSearchOptions(),
+        allowClear: false,
+      })
+    : null;
+
   const clienteSelect = createSearchSelect({
     container: content.querySelector('[data-mount="v-cliente"]'),
     placeholder: "Buscar cliente por nome ou documento… (opcional)",
@@ -291,6 +319,11 @@ function renderNovaVenda(content) {
       return;
     }
 
+    if (admin && !empresaSelect.getValue()) {
+      errorEl.innerHTML = `<div class="form-error">Selecione uma empresa.</div>`;
+      return;
+    }
+
     const payload = {
       p_cliente_id: clienteSelect.getValue() || null,
       p_data_venda: content.querySelector("#v-data").value || null,
@@ -299,6 +332,7 @@ function renderNovaVenda(content) {
       p_desconto: Number(descontoInput.value || 0),
       p_itens: cart.map((item) => ({ produto_id: item.produto_id, quantidade: item.quantidade, preco_unitario: item.preco_unitario })),
     };
+    if (admin) payload.p_empresa_id = empresaSelect.getValue();
 
     const { error } = await supabase.rpc("criar_venda", payload);
 
