@@ -662,6 +662,11 @@ svg {
   color: var(--text-muted);
 }
 
+.financeiro-filtro {
+  justify-content: flex-start;
+  align-items: flex-end;
+}
+
 .input, select.input, textarea.input {
   font-family: inherit;
   font-size: 0.9rem;
@@ -949,6 +954,8 @@ svg {
 .status--pendente { color: var(--warning); background: var(--warning-soft); }
 .status--aprovado { color: var(--success); background: var(--success-soft); }
 .status--reprovado { color: var(--danger); background: var(--danger-soft); }
+.status--venda { color: var(--accent-deep); background: var(--accent-soft); }
+.status--manual { color: var(--amber-deep); background: var(--amber-soft); }
 
 /* ── Empty state ───────────────────────────────────────────────────── */
 
@@ -1638,6 +1645,13 @@ svg {
   letter-spacing: -0.01em;
   margin: 0;
   color: var(--text);
+}
+
+.home-hero__empresa {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  margin: 0.35rem 0 0;
 }
 
 .quick-actions {

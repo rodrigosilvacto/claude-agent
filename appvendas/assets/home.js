@@ -1,5 +1,6 @@
 import { supabase } from "./supabaseClient.js";
 import { formatCurrency, formatDate, escapeHtml, registerAutoRefresh } from "./app.js";
+import { getCurrentEmpresaId } from "./auth.js";
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
@@ -25,10 +26,15 @@ async function load(view, opts = {}) {
   const hoje = todayStr();
   const mesInicio = `${hoje.slice(0, 7)}-01`;
 
-  const [vendasMesRes, ultimasRes, produtosRes] = await Promise.all([
+  const empresaId = getCurrentEmpresaId();
+
+  const [vendasMesRes, ultimasRes, produtosRes, empresaRes] = await Promise.all([
     supabase.from("vendas").select("id, total, status, data_venda").gte("data_venda", mesInicio),
     supabase.from("vendas").select("id, numero, data_venda, status, total, cliente:clientes(nome)").order("numero", { ascending: false }).limit(6),
     supabase.from("produtos").select("id, nome, estoque, estoque_minimo").eq("ativo", true),
+    empresaId
+      ? supabase.from("empresas").select("nome_fantasia").eq("id", empresaId).maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
   ]);
 
   if (vendasMesRes.error || ultimasRes.error || produtosRes.error) {
@@ -42,11 +48,13 @@ async function load(view, opts = {}) {
   const faturamentoHoje = vendasHoje.reduce((sum, v) => sum + Number(v.total || 0), 0);
   const faturamentoMes = vendasMesConfirmadas.reduce((sum, v) => sum + Number(v.total || 0), 0);
   const estoqueBaixo = (produtosRes.data || []).filter((p) => p.estoque <= p.estoque_minimo).sort((a, b) => a.estoque - b.estoque);
+  const nomeFantasia = empresaRes?.data?.nome_fantasia || "";
 
   view.innerHTML = `
     <div class="home-hero">
       <p class="home-hero__eyebrow">${greeting()}, equipe comercial</p>
       <h2 class="home-hero__title">${formatFullDate(hoje)}</h2>
+      ${nomeFantasia ? `<p class="home-hero__empresa">${escapeHtml(nomeFantasia)}</p>` : ""}
     </div>
 
     <div class="quick-actions">

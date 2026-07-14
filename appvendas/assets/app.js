@@ -12,7 +12,7 @@ import { initAuth, isLoggedIn, isAdmin, getCurrentUsuario, signOut, onAuthChange
 // ES modules carregar duas instâncias do módulo (hashchange listener e
 // boot() duplicados). Ver commit e4f8448 (correção original) e 3659424/
 // e75bd3a (reintrodução e reversão do bug).
-export const APP_BUILD = "2026-07-12 16:40 -03";
+export const APP_BUILD = "2026-07-14 15:30 -03";
 
 const ROUTES = {
   home: {
@@ -44,6 +44,11 @@ const ROUTES = {
     breadcrumb: "Movimentações",
     title: "Agendamento",
     load: () => import("./agenda.js"),
+  },
+  "contas-receber": {
+    breadcrumb: "Financeiro",
+    title: "Contas a Receber",
+    load: () => import("./financeiro.js"),
   },
   relatorios: {
     breadcrumb: "Relatórios",
