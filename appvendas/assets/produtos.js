@@ -1,9 +1,23 @@
 import { renderCadastro } from "./cadastro.js";
 import { supabase } from "./supabaseClient.js";
 import { formatCurrency, escapeHtml } from "./app.js";
+import { isAdmin, getCurrentEmpresaId } from "./auth.js";
 
-async function loadFornecedorOptions() {
-  const { data } = await supabase.from("fornecedores").select("id, nome").order("nome", { ascending: true });
+// Um admin enxerga fornecedores de todas as empresas nas outras telas (é
+// assim que a RLS foi desenhada), mas o dropdown de fornecedor no formulário
+// de Produto precisa ficar restrito à empresa do próprio produto — senão um
+// admin cadastrando um produto da Empresa A consegue vincular um fornecedor
+// que só existe na Empresa B. Para "caixa" a RLS já restringe à própria
+// empresa; o filtro aqui é reforço explícito, não a única barreira.
+async function loadFornecedorOptions(existingRow, empresaIdOverride) {
+  const empresaId = isAdmin() ? (empresaIdOverride ?? existingRow?.empresa_id ?? null) : getCurrentEmpresaId();
+  if (!empresaId) return [];
+
+  const { data } = await supabase
+    .from("fornecedores")
+    .select("id, nome")
+    .eq("empresa_id", empresaId)
+    .order("nome", { ascending: true });
   return (data || []).map((f) => ({ value: f.id, label: f.nome }));
 }
 
@@ -45,7 +59,7 @@ export async function render(view, actionsEl) {
       { key: "custo", label: "Custo", type: "number", step: "0.01", default: 0 },
       { key: "estoque", label: "Estoque atual", type: "number", step: "1", required: true, default: 0 },
       { key: "estoque_minimo", label: "Estoque mínimo", type: "number", step: "1", default: 0 },
-      { key: "fornecedor_id", label: "Fornecedor", type: "search-select", optionsLoader: loadFornecedorOptions },
+      { key: "fornecedor_id", label: "Fornecedor", type: "search-select", dependsOn: "empresa_id", optionsLoader: loadFornecedorOptions },
       { key: "descricao", label: "Descrição", type: "textarea", full: true },
       { key: "ativo", label: "Produto ativo", type: "checkbox", default: true, full: true },
     ],

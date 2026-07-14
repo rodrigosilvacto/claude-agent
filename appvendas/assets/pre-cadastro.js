@@ -20,6 +20,32 @@ const errorEl = document.getElementById("precadastro-error");
 const submitBtn = document.getElementById("precadastro-submit");
 const successEl = document.getElementById("precadastro-success");
 
+// Mitigação contra spam nesta rota pública sem exigir um serviço de captcha
+// de terceiro: um campo-armadilha que só um bot preenche, e um tempo mínimo
+// entre a página carregar e o formulário ser enviado (bots costumam
+// submeter em milissegundos). Nos dois casos, finge sucesso em vez de
+// avisar o bot do que foi detectado.
+const formLoadedAt = Date.now();
+const MIN_SUBMIT_MS = 2500;
+
+function pareceBot() {
+  return Boolean(form.elements.website.value) || Date.now() - formLoadedAt < MIN_SUBMIT_MS;
+}
+
+function mostrarSucesso(nome) {
+  form.hidden = true;
+  successEl.hidden = false;
+  successEl.innerHTML = `
+    <div class="precadastro-success">
+      <div class="precadastro-success__icon">
+        <svg aria-hidden="true" focusable="false" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+      </div>
+      <p class="precadastro-success__title">Cadastro recebido, ${escapeHtml(nome)}!</p>
+      <p class="precadastro-success__hint">Nossa equipe vai analisar seus dados. Assim que aprovado, você já passa a fazer parte da nossa base de clientes.</p>
+    </div>
+  `;
+}
+
 const cepInput = document.getElementById("pc-cep");
 const cepHint = document.getElementById("pc-cep-hint");
 
@@ -50,6 +76,12 @@ cepInput.addEventListener("blur", async () => {
 form.addEventListener("submit", async (e) => {
   e.preventDefault();
   errorEl.innerHTML = "";
+
+  if (pareceBot()) {
+    mostrarSucesso(form.elements.nome.value || "");
+    return;
+  }
+
   submitBtn.disabled = true;
   submitBtn.textContent = "Enviando…";
 
@@ -74,16 +106,5 @@ form.addEventListener("submit", async (e) => {
     return;
   }
 
-  const nome = data?.[0]?.nome || form.elements.nome.value;
-  form.hidden = true;
-  successEl.hidden = false;
-  successEl.innerHTML = `
-    <div class="precadastro-success">
-      <div class="precadastro-success__icon">
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
-      </div>
-      <p class="precadastro-success__title">Cadastro recebido, ${escapeHtml(nome)}!</p>
-      <p class="precadastro-success__hint">Nossa equipe vai analisar seus dados. Assim que aprovado, você já passa a fazer parte da nossa base de clientes.</p>
-    </div>
-  `;
+  mostrarSucesso(data?.[0]?.nome || form.elements.nome.value);
 });

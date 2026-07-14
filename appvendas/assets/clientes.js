@@ -1,6 +1,6 @@
 import { renderCadastro } from "./cadastro.js";
 import { supabase } from "./supabaseClient.js";
-import { showToast } from "./app.js";
+import { showToast, friendlyPgError } from "./app.js";
 import { getCurrentEmpresaId } from "./auth.js";
 
 const SITUACAO_LABEL = { pendente: "Pendente", aprovado: "Aprovado", reprovado: "Reprovado" };
@@ -54,7 +54,7 @@ export async function render(view, actionsEl) {
         : { status_cadastro: "reprovado", ativo: false };
       const { error } = await supabase.from("clientes").update(patch).eq("id", row.id);
       if (error) {
-        showToast(error.message, "error");
+        showToast(friendlyPgError(error), "error");
         return;
       }
       showToast(action === "aprovar" ? `${row.nome} aprovado — já pode ser selecionado nas vendas.` : `${row.nome} reprovado.`);

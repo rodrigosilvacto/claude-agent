@@ -1,6 +1,18 @@
 import { supabase } from "./supabaseClient.js";
 import { formatCurrency, formatDate, escapeHtml, registerAutoRefresh } from "./app.js";
 
+// Buscar toda a tabela de vendas/itens a cada 20s não escala à medida que o
+// histórico cresce. Este painel é um resumo do momento, então em vez de
+// paginar (não faz sentido para um dashboard agregado) limitamos a janela a
+// um período recente — os rótulos abaixo deixam isso explícito.
+const RELATORIO_DIAS = 90;
+
+function cutoffDateStr() {
+  const d = new Date();
+  d.setDate(d.getDate() - RELATORIO_DIAS);
+  return d.toISOString().slice(0, 10);
+}
+
 export async function render(view, actionsEl) {
   actionsEl.innerHTML = "";
   await load(view);
@@ -11,10 +23,11 @@ async function load(view, opts = {}) {
   const { silent = false } = opts;
   if (!silent) view.innerHTML = `<div class="empty-state">Carregando relatórios…</div>`;
 
+  const cutoff = cutoffDateStr();
   const [vendasRes, produtosRes, itensRes] = await Promise.all([
-    supabase.from("vendas").select("id, total, status, data_venda, cliente_id, cliente:clientes(nome)"),
+    supabase.from("vendas").select("id, total, status, data_venda, cliente_id, cliente:clientes(nome)").gte("data_venda", cutoff),
     supabase.from("produtos").select("id, nome, estoque, estoque_minimo").eq("ativo", true),
-    supabase.from("venda_itens").select("produto_id, quantidade, subtotal, produto:produtos(nome), venda:vendas(status)"),
+    supabase.from("venda_itens").select("produto_id, quantidade, subtotal, produto:produtos(nome), venda:vendas!inner(status, data_venda)").gte("venda.data_venda", cutoff),
   ]);
 
   if (vendasRes.error || produtosRes.error || itensRes.error) {
@@ -42,10 +55,11 @@ async function load(view, opts = {}) {
   );
 
   view.innerHTML = `
+    <p class="record-count" style="margin: 0 0 1rem;">Vendas e itens considerados dos últimos ${RELATORIO_DIAS} dias. Estoque reflete a situação atual.</p>
     <div class="stat-grid">
-      ${statCard("Vendas confirmadas", vendasConfirmadas.length, "var(--accent)")}
-      ${statCard("Faturamento total", formatCurrency(faturamento), "var(--accent-deep)")}
-      ${statCard("Ticket médio", formatCurrency(ticketMedio), "var(--amber)")}
+      ${statCard(`Vendas confirmadas (${RELATORIO_DIAS} dias)`, vendasConfirmadas.length, "var(--accent)")}
+      ${statCard(`Faturamento (${RELATORIO_DIAS} dias)`, formatCurrency(faturamento), "var(--accent-deep)")}
+      ${statCard(`Ticket médio (${RELATORIO_DIAS} dias)`, formatCurrency(ticketMedio), "var(--amber)")}
       ${statCard("Produtos com estoque baixo", estoqueBaixo.length, "var(--danger)")}
     </div>
 

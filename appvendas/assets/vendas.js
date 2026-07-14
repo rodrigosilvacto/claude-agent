@@ -1,6 +1,7 @@
 import { supabase } from "./supabaseClient.js";
-import { showToast, openModal, confirmDialog, formatCurrency, formatDate, formatDateTime, escapeHtml, createSearchSelect, registerAutoRefresh, consumeVendaPrefill } from "./app.js";
+import { showToast, openModal, confirmDialog, formatCurrency, formatDate, formatDateTime, escapeHtml, createSearchSelect, registerAutoRefresh, consumeVendaPrefill, withButtonLock, friendlyPgError } from "./app.js";
 import { isAdmin } from "./auth.js";
+import { loadClientesAtivos, loadProdutosAtivos, loadEmpresasAtivas, clienteSearchOptions, produtoSearchOptions, empresaSearchOptions, produtoMetaPrecoEstoque } from "./catalogo.js";
 
 // Cada forma de pagamento vira um "tile" com ícone no fechamento da venda —
 // em vez de uma fileira de pílulas de texto (que não cabiam lado a lado e
@@ -9,23 +10,23 @@ import { isAdmin } from "./auth.js";
 const FORMAS_PAGAMENTO = [
   {
     label: "Dinheiro",
-    icon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="3"/></svg>',
+    icon: '<svg aria-hidden="true" focusable="false" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="3"/></svg>',
   },
   {
     label: "Pix",
-    icon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z"/></svg>',
+    icon: '<svg aria-hidden="true" focusable="false" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z"/></svg>',
   },
   {
     label: "Cartão de crédito",
-    icon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>',
+    icon: '<svg aria-hidden="true" focusable="false" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>',
   },
   {
     label: "Cartão de débito",
-    icon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><rect x="5" y="9" width="4" height="3" rx="0.6"/><path d="M5 16h6"/></svg>',
+    icon: '<svg aria-hidden="true" focusable="false" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><rect x="5" y="9" width="4" height="3" rx="0.6"/><path d="M5 16h6"/></svg>',
   },
   {
     label: "Boleto",
-    icon: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="butt"><path d="M3 4v16" stroke-width="1.5"/><path d="M6.5 4v16" stroke-width="3"/><path d="M11 4v16" stroke-width="1.5"/><path d="M14 4v16" stroke-width="1.5"/><path d="M17.5 4v16" stroke-width="3"/><path d="M21.5 4v16" stroke-width="1.5"/></svg>',
+    icon: '<svg aria-hidden="true" focusable="false" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="butt"><path d="M3 4v16" stroke-width="1.5"/><path d="M6.5 4v16" stroke-width="3"/><path d="M11 4v16" stroke-width="1.5"/><path d="M14 4v16" stroke-width="1.5"/><path d="M17.5 4v16" stroke-width="3"/><path d="M21.5 4v16" stroke-width="1.5"/></svg>',
   },
 ];
 
@@ -66,41 +67,9 @@ export async function render(view, actionsEl) {
   tabNova.addEventListener("click", () => activate("nova"));
   tabHistorico.addEventListener("click", () => activate("historico"));
 
-  [clientesOptions, produtosOptions, empresasOptions] = await Promise.all([loadClientes(), loadProdutos(), loadEmpresas()]);
+  [clientesOptions, produtosOptions, empresasOptions] = await Promise.all([loadClientesAtivos(), loadProdutosAtivos(), loadEmpresasAtivas()]);
 
   activate("nova");
-}
-
-async function loadClientes() {
-  const { data } = await supabase.from("clientes").select("id, nome, documento").eq("ativo", true).eq("status_cadastro", "aprovado").order("nome", { ascending: true });
-  return data || [];
-}
-
-async function loadProdutos() {
-  const { data } = await supabase.from("produtos").select("id, nome, sku, preco, estoque").eq("ativo", true).order("nome", { ascending: true });
-  return data || [];
-}
-
-async function loadEmpresas() {
-  if (!isAdmin()) return [];
-  const { data } = await supabase.from("empresas").select("id, nome_fantasia, codigo").eq("ativo", true).order("nome_fantasia", { ascending: true });
-  return data || [];
-}
-
-function empresaSearchOptions() {
-  return empresasOptions.map((e) => ({ value: e.id, label: e.nome_fantasia, meta: e.codigo }));
-}
-
-function clienteSearchOptions() {
-  return clientesOptions.map((c) => ({ value: c.id, label: c.nome, meta: c.documento || "" }));
-}
-
-function produtoSearchOptions() {
-  return produtosOptions.map((p) => ({
-    value: p.id,
-    label: p.nome,
-    meta: `${formatCurrency(p.preco)} · estoque ${p.estoque}`,
-  }));
 }
 
 function renderNovaVenda(content) {
@@ -225,7 +194,7 @@ function renderNovaVenda(content) {
     ? createSearchSelect({
         container: content.querySelector('[data-mount="v-empresa"]'),
         placeholder: "Buscar empresa…",
-        options: empresaSearchOptions(),
+        options: empresaSearchOptions(empresasOptions),
         allowClear: false,
       })
     : null;
@@ -233,7 +202,7 @@ function renderNovaVenda(content) {
   const clienteSelect = createSearchSelect({
     container: content.querySelector('[data-mount="v-cliente"]'),
     placeholder: "Buscar cliente por nome ou documento… (opcional)",
-    options: clienteSearchOptions(),
+    options: clienteSearchOptions(clientesOptions),
     value: prefill?.clienteId || null,
     allowClear: true,
   });
@@ -241,7 +210,7 @@ function renderNovaVenda(content) {
   const produtoSelect = createSearchSelect({
     container: content.querySelector('[data-mount="v-produto"]'),
     placeholder: "Buscar produto por nome ou SKU…",
-    options: produtoSearchOptions(),
+    options: produtoSearchOptions(produtosOptions, { meta: produtoMetaPrecoEstoque }),
     allowClear: true,
   });
 
@@ -310,7 +279,7 @@ function renderNovaVenda(content) {
     }
   });
 
-  content.querySelector("#v-finalizar").addEventListener("click", async () => {
+  content.querySelector("#v-finalizar").addEventListener("click", (e) => withButtonLock(e.currentTarget, async () => {
     const errorEl = content.querySelector("#v-error");
     errorEl.innerHTML = "";
 
@@ -337,7 +306,7 @@ function renderNovaVenda(content) {
     const { error } = await supabase.rpc("criar_venda", payload);
 
     if (error) {
-      errorEl.innerHTML = `<div class="form-error">${escapeHtml(error.message)}</div>`;
+      errorEl.innerHTML = `<div class="form-error">${escapeHtml(friendlyPgError(error))}</div>`;
       return;
     }
 
@@ -350,49 +319,59 @@ function renderNovaVenda(content) {
 
     agendamentoOrigemId = null;
     cart = [];
-    produtosOptions = await loadProdutos();
+    produtosOptions = await loadProdutosAtivos();
     renderNovaVenda(content);
-  });
+  }));
 
   renderCart();
 
   // Atualiza silenciosamente os catálogos de cliente/produto (estoque, novos
   // cadastros) sem perder o carrinho em andamento nem fechar os campos de busca.
   registerAutoRefresh(async () => {
-    const [nextClientes, nextProdutos] = await Promise.all([loadClientes(), loadProdutos()]);
+    const [nextClientes, nextProdutos] = await Promise.all([loadClientesAtivos(), loadProdutosAtivos()]);
     clientesOptions = nextClientes;
     produtosOptions = nextProdutos;
-    clienteSelect.setOptions(clienteSearchOptions());
-    produtoSelect.setOptions(produtoSearchOptions());
+    clienteSelect.setOptions(clienteSearchOptions(clientesOptions));
+    produtoSelect.setOptions(produtoSearchOptions(produtosOptions, { meta: produtoMetaPrecoEstoque }));
   }, 15000);
 }
 
+const HISTORICO_PAGE_SIZE = 50;
+
 async function renderHistorico(content) {
-  content.innerHTML = `<div class="card"><div class="table-wrap" id="vendas-table">${'<div class="empty-state">Carregando…</div>'}</div></div>`;
-  const tableWrap = content.querySelector("#vendas-table");
+  content.innerHTML = `<div class="card"><div class="table-wrap" id="vendas-table">${'<div class="empty-state">Carregando…</div>'}</div></div><div id="vendas-pagination"></div>`;
 
-  await loadHistorico(tableWrap);
+  const state = { page: 0 };
+  await loadHistorico(content, state);
 
-  registerAutoRefresh(() => loadHistorico(content.querySelector("#vendas-table"), { silent: true }), 15000);
+  registerAutoRefresh(() => loadHistorico(content, state, { silent: true }), 15000);
 }
 
-async function loadHistorico(tableWrap, opts = {}) {
+async function loadHistorico(content, state, opts = {}) {
   const { silent = false } = opts;
+  const tableWrap = content.querySelector("#vendas-table");
   if (!silent) tableWrap.innerHTML = `<div class="empty-state">Carregando…</div>`;
 
-  const { data, error } = await supabase
+  const from = state.page * HISTORICO_PAGE_SIZE;
+  const { data, error, count } = await supabase
     .from("vendas")
-    .select("id, numero, data_venda, status, total, forma_pagamento, cliente:clientes(nome)")
+    .select("id, numero, data_venda, status, total, forma_pagamento, cliente:clientes(nome)", { count: "exact" })
     .order("numero", { ascending: false })
-    .limit(200);
+    .range(from, from + HISTORICO_PAGE_SIZE - 1);
 
   if (error) {
-    tableWrap.innerHTML = `<div class="empty-state"><p class="empty-state__title">Erro ao carregar</p><p class="empty-state__hint">${escapeHtml(error.message)}</p></div>`;
+    tableWrap.innerHTML = `<div class="empty-state"><p class="empty-state__title">Erro ao carregar</p><p class="empty-state__hint">${escapeHtml(friendlyPgError(error))}</p></div>`;
     return;
+  }
+
+  if ((!data || data.length === 0) && state.page > 0 && count > 0) {
+    state.page = Math.max(0, Math.ceil(count / HISTORICO_PAGE_SIZE) - 1);
+    return loadHistorico(content, state, opts);
   }
 
   if (!data || data.length === 0) {
     tableWrap.innerHTML = `<div class="empty-state"><p class="empty-state__title">Nenhuma venda registrada ainda</p></div>`;
+    content.querySelector("#vendas-pagination").innerHTML = "";
     return;
   }
 
@@ -430,12 +409,41 @@ async function loadHistorico(tableWrap, opts = {}) {
       if (!ok) return;
       const { error: cancelError } = await supabase.rpc("cancelar_venda", { p_venda_id: btn.dataset.cancel });
       if (cancelError) {
-        showToast(cancelError.message, "error");
+        showToast(friendlyPgError(cancelError), "error");
         return;
       }
       showToast("Venda cancelada e estoque devolvido.");
-      loadHistorico(tableWrap);
+      loadHistorico(content, state);
     });
+  });
+
+  renderHistoricoPagination(content, state, count);
+}
+
+function renderHistoricoPagination(content, state, count) {
+  const el = content.querySelector("#vendas-pagination");
+  const totalPages = Math.max(1, Math.ceil(count / HISTORICO_PAGE_SIZE));
+
+  if (totalPages <= 1) {
+    el.innerHTML = "";
+    return;
+  }
+
+  el.innerHTML = `
+    <div class="pagination">
+      <button type="button" class="btn btn--ghost btn--sm" id="vendas-page-prev" ${state.page === 0 ? "disabled" : ""}>‹ Anterior</button>
+      <span class="pagination__label">Página ${state.page + 1} de ${totalPages}</span>
+      <button type="button" class="btn btn--ghost btn--sm" id="vendas-page-next" ${state.page >= totalPages - 1 ? "disabled" : ""}>Próxima ›</button>
+    </div>
+  `;
+
+  el.querySelector("#vendas-page-prev").addEventListener("click", () => {
+    state.page = Math.max(0, state.page - 1);
+    loadHistorico(content, state);
+  });
+  el.querySelector("#vendas-page-next").addEventListener("click", () => {
+    state.page += 1;
+    loadHistorico(content, state);
   });
 }
 

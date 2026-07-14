@@ -308,7 +308,7 @@ export function confirmDialog(message, { confirmLabel = "Confirmar", danger = tr
 // por teclado. Usado em qualquer vínculo entre cadastros (cliente,
 // produto, fornecedor) no lugar de um <select> tradicional.
 
-const SS_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>';
+const SS_ICON = '<svg aria-hidden="true" focusable="false" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>';
 
 function normalizeForSearch(str) {
   return String(str ?? "")
@@ -457,6 +457,22 @@ export function createSearchSelect({
   };
 }
 
+// ── Trava de ação em andamento ─────────────────────────────────────
+//
+// Clique duplo ou rede lenta em ações críticas (finalizar venda, registrar
+// recebimento, agendar, salvar um cadastro) podia disparar a mesma chamada
+// de rede duas vezes e gerar registros duplicados. Desabilita o botão pelo
+// tempo da chamada.
+export async function withButtonLock(button, task) {
+  if (!button || button.disabled) return;
+  button.disabled = true;
+  try {
+    await task();
+  } finally {
+    button.disabled = false;
+  }
+}
+
 // ── Atualização automática ───────────────────────────────────────────
 //
 // Em vez de exigir F5, cada tela registra uma função de recarga que é
@@ -528,6 +544,26 @@ export function formatDate(value) {
 export function formatDateTime(value) {
   if (!value) return "—";
   return new Date(value).toLocaleString("pt-BR");
+}
+
+// ── Erros do Postgres ──────────────────────────────────────────────
+//
+// A maioria dos módulos renderizava error.message bruto do Postgres direto
+// na tela do operador de caixa. Erros levantados pelas próprias RPCs (via
+// `raise exception '...'`) já vêm em português e são exibidos como estão;
+// este mapa cobre os códigos de erro genéricos do driver que apareceriam
+// crus (violação de unicidade, chave estrangeira, RLS) quando ninguém tratou
+// o caso especificamente.
+const PG_ERROR_MESSAGES = {
+  23505: "Já existe um registro com esses dados.",
+  23503: "Não é possível concluir: existem registros vinculados a este item.",
+  23502: "Preencha todos os campos obrigatórios.",
+  42501: "Você não tem permissão para executar esta ação.",
+};
+
+export function friendlyPgError(error, overrides = {}) {
+  if (!error) return "Ocorreu um erro inesperado.";
+  return overrides[error.code] || PG_ERROR_MESSAGES[error.code] || error.message || "Ocorreu um erro inesperado.";
 }
 
 export function escapeHtml(str) {

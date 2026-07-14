@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800;900&family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./assets/styles.css?v=11" />
+  <link rel="stylesheet" href="./assets/styles.css?v=14" />
 </head>
 <body>
   <div class="precadastro-screen">
@@ -56,6 +56,10 @@
             <input class="input" type="text" id="pc-telefone" name="telefone" />
           </div>
         </div>
+        <div class="hp-field" aria-hidden="true">
+          <label for="pc-website">Deixe este campo em branco</label>
+          <input type="text" id="pc-website" name="website" tabindex="-1" autocomplete="off" />
+        </div>
         <button type="submit" class="btn btn--primary" id="precadastro-submit" style="width:100%; justify-content:center; margin-top: 1.25rem;">Enviar cadastro</button>
       </form>
 
@@ -63,6 +67,6 @@
     </div>
   </div>
 
-  <script type="module" src="./assets/pre-cadastro.js?v=2"></script>
+  <script type="module" src="./assets/pre-cadastro.js?v=3"></script>
 </body>
 </html>

@@ -4,10 +4,19 @@
 // reduz o estoque dele — mesmo padrão de criar_venda/cancelar_venda.
 
 import { supabase } from "./supabaseClient.js";
-import { showToast, openModal, closeModal, confirmDialog, formatCurrency, formatDate, escapeHtml, createSearchSelect, registerAutoRefresh } from "./app.js";
+import { showToast, openModal, closeModal, confirmDialog, formatCurrency, formatDate, escapeHtml, createSearchSelect, registerAutoRefresh, withButtonLock, friendlyPgError } from "./app.js";
 import { isAdmin, getCurrentEmpresaId } from "./auth.js";
+import { loadClientesAtivos, loadProdutosAtivos, loadEmpresasAtivas, clienteSearchOptions, produtoSearchOptions, empresaSearchOptions, produtoMetaPrecoEstoque } from "./catalogo.js";
 
 const FORMAS_PAGAMENTO = ["Dinheiro", "Pix", "Cartão de crédito", "Cartão de débito", "Boleto"];
+
+// O extrato mistura vendas + recebimentos manuais num período — sem uma view
+// no banco que já una as duas tabelas, não dá pra paginar isso de forma
+// nativa no Postgres. FETCH_CAP evita buscar um período enorme por inteiro;
+// PAGE_SIZE pagina a renderização da tabela em memória (os totais do período
+// continuam somando todo o conjunto buscado, não só a página em tela).
+const FETCH_CAP = 2000;
+const PAGE_SIZE = 50;
 
 let clientesOptions = [];
 let produtosOptions = [];
@@ -21,26 +30,10 @@ function firstDayOfMonthStr() {
   return `${todayStr().slice(0, 7)}-01`;
 }
 
-async function loadClientes() {
-  const { data } = await supabase.from("clientes").select("id, nome, documento").eq("ativo", true).eq("status_cadastro", "aprovado").order("nome", { ascending: true });
-  return data || [];
-}
-
-async function loadProdutos() {
-  const { data } = await supabase.from("produtos").select("id, nome, sku, preco, estoque").eq("ativo", true).order("nome", { ascending: true });
-  return data || [];
-}
-
-async function loadEmpresas() {
-  if (!isAdmin()) return [];
-  const { data } = await supabase.from("empresas").select("id, nome_fantasia, codigo").eq("ativo", true).order("nome_fantasia", { ascending: true });
-  return data || [];
-}
-
 export async function render(view, actionsEl) {
-  const state = { inicio: firstDayOfMonthStr(), fim: todayStr() };
+  const state = { inicio: firstDayOfMonthStr(), fim: todayStr(), page: 0, linhas: [] };
 
-  [clientesOptions, produtosOptions, empresasOptions] = await Promise.all([loadClientes(), loadProdutos(), loadEmpresas()]);
+  [clientesOptions, produtosOptions, empresasOptions] = await Promise.all([loadClientesAtivos(), loadProdutosAtivos(), loadEmpresasAtivas()]);
 
   actionsEl.innerHTML = `<button type="button" class="btn btn--primary" id="btn-novo-recebimento">+ Novo recebimento</button>`;
   actionsEl.querySelector("#btn-novo-recebimento").addEventListener("click", () => {
@@ -71,6 +64,7 @@ export async function render(view, actionsEl) {
   view.querySelector("#cr-filtrar").addEventListener("click", () => {
     state.inicio = inicioInput.value || state.inicio;
     state.fim = fimInput.value || state.fim;
+    state.page = 0;
     load(view, state);
   });
 
@@ -90,17 +84,19 @@ async function load(view, state, opts = {}) {
       .select("id, numero, data_venda, forma_pagamento, total, cliente:clientes(nome), itens:venda_itens(quantidade, produto:produtos(nome))")
       .eq("status", "confirmada")
       .gte("data_venda", state.inicio)
-      .lte("data_venda", state.fim),
+      .lte("data_venda", state.fim)
+      .limit(FETCH_CAP),
     supabase
       .from("recebimentos")
       .select("id, data_recebimento, quantidade, valor, forma_pagamento, observacoes, status, cliente:clientes(nome), produto:produtos(nome)")
       .gte("data_recebimento", state.inicio)
-      .lte("data_recebimento", state.fim),
+      .lte("data_recebimento", state.fim)
+      .limit(FETCH_CAP),
   ]);
 
   if (vendasRes.error || recebimentosRes.error) {
     const err = vendasRes.error || recebimentosRes.error;
-    content.innerHTML = `<div class="empty-state"><p class="empty-state__title">Não foi possível carregar os recebimentos</p><p class="empty-state__hint">${escapeHtml(err.message)}</p></div>`;
+    content.innerHTML = `<div class="empty-state"><p class="empty-state__title">Não foi possível carregar os recebimentos</p><p class="empty-state__hint">${escapeHtml(friendlyPgError(err))}</p></div>`;
     return;
   }
 
@@ -127,12 +123,25 @@ async function load(view, state, opts = {}) {
     status: r.status,
   }));
 
-  const linhas = [...linhasVendas, ...linhasManuais].sort((a, b) => new Date(b.data) - new Date(a.data));
+  state.linhas = [...linhasVendas, ...linhasManuais].sort((a, b) => new Date(b.data) - new Date(a.data));
+  const totalPages = Math.max(1, Math.ceil(state.linhas.length / PAGE_SIZE));
+  state.page = Math.min(state.page, totalPages - 1);
+
+  renderContent(view, state);
+}
+
+function renderContent(view, state) {
+  const content = view.querySelector("#cr-content");
+  const linhas = state.linhas;
   const linhasAtivas = linhas.filter((l) => l.status !== "cancelado");
 
   const totalRecebido = linhasAtivas.reduce((sum, l) => sum + l.valor, 0);
   const totalVendas = linhasAtivas.filter((l) => l.origem === "venda").reduce((sum, l) => sum + l.valor, 0);
   const totalManual = linhasAtivas.filter((l) => l.origem === "manual").reduce((sum, l) => sum + l.valor, 0);
+
+  const totalPages = Math.max(1, Math.ceil(linhas.length / PAGE_SIZE));
+  const from = state.page * PAGE_SIZE;
+  const linhasPagina = linhas.slice(from, from + PAGE_SIZE);
 
   content.innerHTML = `
     <div class="stat-grid">
@@ -143,7 +152,14 @@ async function load(view, state, opts = {}) {
     </div>
     <div class="card card-section">
       <p class="section-title">Recebimentos</p>
-      ${renderTabela(linhas)}
+      ${renderTabela(linhasPagina)}
+      ${totalPages > 1 ? `
+        <div class="pagination">
+          <button type="button" class="btn btn--ghost btn--sm" id="cr-page-prev" ${state.page === 0 ? "disabled" : ""}>‹ Anterior</button>
+          <span class="pagination__label">Página ${state.page + 1} de ${totalPages}</span>
+          <button type="button" class="btn btn--ghost btn--sm" id="cr-page-next" ${state.page >= totalPages - 1 ? "disabled" : ""}>Próxima ›</button>
+        </div>
+      ` : ""}
     </div>
   `;
 
@@ -153,14 +169,25 @@ async function load(view, state, opts = {}) {
       if (!ok) return;
       const { error } = await supabase.rpc("cancelar_recebimento_manual", { p_recebimento_id: btn.dataset.cancelar });
       if (error) {
-        showToast(error.message, "error");
+        showToast(friendlyPgError(error), "error");
         return;
       }
       showToast("Recebimento cancelado e estoque devolvido.");
-      produtosOptions = await loadProdutos();
+      produtosOptions = await loadProdutosAtivos();
       load(view, state);
     });
   });
+
+  if (totalPages > 1) {
+    content.querySelector("#cr-page-prev").addEventListener("click", () => {
+      state.page = Math.max(0, state.page - 1);
+      renderContent(view, state);
+    });
+    content.querySelector("#cr-page-next").addEventListener("click", () => {
+      state.page += 1;
+      renderContent(view, state);
+    });
+  }
 }
 
 function statCard(label, value, tagColor) {
@@ -204,22 +231,6 @@ function renderTabela(linhas) {
 }
 
 // ── Modal de novo recebimento manual ────────────────────────────────
-
-function produtoSearchOptions() {
-  return produtosOptions.map((p) => ({
-    value: p.id,
-    label: p.nome,
-    meta: `${formatCurrency(p.preco)} · estoque ${p.estoque}`,
-  }));
-}
-
-function clienteSearchOptions() {
-  return clientesOptions.map((c) => ({ value: c.id, label: c.nome, meta: c.documento || "" }));
-}
-
-function empresaSearchOptions() {
-  return empresasOptions.map((e) => ({ value: e.id, label: e.nome_fantasia, meta: e.codigo }));
-}
 
 function openRecebimentoForm(onSaved) {
   const admin = isAdmin();
@@ -277,7 +288,7 @@ function openRecebimentoForm(onSaved) {
     ? createSearchSelect({
         container: body.querySelector('[data-mount="cr-empresa"]'),
         placeholder: "Buscar empresa…",
-        options: empresaSearchOptions(),
+        options: empresaSearchOptions(empresasOptions),
         value: getCurrentEmpresaId(),
         allowClear: false,
       })
@@ -286,14 +297,14 @@ function openRecebimentoForm(onSaved) {
   const clienteSelect = createSearchSelect({
     container: body.querySelector('[data-mount="cr-cliente"]'),
     placeholder: "Buscar cliente por nome ou documento… (opcional)",
-    options: clienteSearchOptions(),
+    options: clienteSearchOptions(clientesOptions),
     allowClear: true,
   });
 
   const produtoSelect = createSearchSelect({
     container: body.querySelector('[data-mount="cr-produto"]'),
     placeholder: "Buscar produto por nome ou SKU…",
-    options: produtoSearchOptions(),
+    options: produtoSearchOptions(produtosOptions, { meta: produtoMetaPrecoEstoque }),
     allowClear: true,
     onChange: () => atualizarSugestaoValor(),
   });
@@ -320,42 +331,44 @@ function openRecebimentoForm(onSaved) {
 
   body.querySelector("#cr-cancel").addEventListener("click", closeModal);
 
-  body.querySelector("#cr-form").addEventListener("submit", async (e) => {
+  body.querySelector("#cr-form").addEventListener("submit", (e) => {
     e.preventDefault();
-    const errorEl = body.querySelector("#cr-form-error");
-    errorEl.innerHTML = "";
+    withButtonLock(body.querySelector('#cr-form button[type="submit"]'), async () => {
+      const errorEl = body.querySelector("#cr-form-error");
+      errorEl.innerHTML = "";
 
-    const produtoId = produtoSelect.getValue();
-    if (!produtoId) {
-      errorEl.innerHTML = `<div class="form-error">Selecione um produto.</div>`;
-      return;
-    }
+      const produtoId = produtoSelect.getValue();
+      if (!produtoId) {
+        errorEl.innerHTML = `<div class="form-error">Selecione um produto.</div>`;
+        return;
+      }
 
-    if (admin && !empresaSelect.getValue()) {
-      errorEl.innerHTML = `<div class="form-error">Selecione uma empresa.</div>`;
-      return;
-    }
+      if (admin && !empresaSelect.getValue()) {
+        errorEl.innerHTML = `<div class="form-error">Selecione uma empresa.</div>`;
+        return;
+      }
 
-    const payload = {
-      p_produto_id: produtoId,
-      p_quantidade: Number(qtdInput.value || 0),
-      p_valor: Number(valorInput.value || 0),
-      p_cliente_id: clienteSelect.getValue() || null,
-      p_forma_pagamento: body.querySelector("#cr-forma").value || null,
-      p_data_recebimento: body.querySelector("#cr-data").value || null,
-      p_observacoes: body.querySelector("#cr-obs").value || null,
-    };
-    if (admin) payload.p_empresa_id = empresaSelect.getValue();
+      const payload = {
+        p_produto_id: produtoId,
+        p_quantidade: Number(qtdInput.value || 0),
+        p_valor: Number(valorInput.value || 0),
+        p_cliente_id: clienteSelect.getValue() || null,
+        p_forma_pagamento: body.querySelector("#cr-forma").value || null,
+        p_data_recebimento: body.querySelector("#cr-data").value || null,
+        p_observacoes: body.querySelector("#cr-obs").value || null,
+      };
+      if (admin) payload.p_empresa_id = empresaSelect.getValue();
 
-    const { error } = await supabase.rpc("criar_recebimento_manual", payload);
+      const { error } = await supabase.rpc("criar_recebimento_manual", payload);
 
-    if (error) {
-      errorEl.innerHTML = `<div class="form-error">${escapeHtml(error.message)}</div>`;
-      return;
-    }
+      if (error) {
+        errorEl.innerHTML = `<div class="form-error">${escapeHtml(friendlyPgError(error))}</div>`;
+        return;
+      }
 
-    showToast("Recebimento registrado com sucesso.");
-    closeModal();
-    if (onSaved) onSaved();
+      showToast("Recebimento registrado com sucesso.");
+      closeModal();
+      if (onSaved) onSaved();
+    });
   });
 }

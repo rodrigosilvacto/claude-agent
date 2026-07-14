@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# Automatiza o selo de build e o cache-busting do AppVendas. Antes disso,
+# APP_BUILD (assets/app.js) e os "?v=N" de styles.css/pre-cadastro.js nos
+# HTMLs dependiam 100% de alguém lembrar de atualizá-los a cada commit — e já
+# ficaram dessincronizados de fato (index.html e pre-cadastro.html chegaram a
+# referenciar versões diferentes de styles.css).
+#
+# Para ativar (uma vez por clone deste repositório):
+#   git config core.hooksPath scripts/git-hooks
+set -euo pipefail
+
+repo_root="$(git rev-parse --show-toplevel)"
+cd "$repo_root"
+
+staged_files() {
+  git diff --cached --name-only --diff-filter=ACM
+}
+
+# Sobe o "?v=N" de $asset_path para o maior valor atual + 1 em todos os
+# HTMLs do appvendas que o referenciam, e re-adiciona os HTMLs ao commit.
+bump_query_version() {
+  local asset_path="$1"
+  local escaped current next
+  escaped=$(printf '%s' "$asset_path" | sed 's/[.[\*^$]/\\&/g')
+
+  current=$(grep -ohE "${escaped}\?v=[0-9]+" appvendas/*.html 2>/dev/null | grep -oE '[0-9]+$' | sort -n | tail -1)
+  current=${current:-0}
+  next=$((current + 1))
+
+  sed -i -E "s#(${escaped})\?v=[0-9]+#\1?v=${next}#g" appvendas/*.html
+  git add appvendas/*.html
+}
+
+if staged_files | grep -qx 'appvendas/assets/app.js'; then
+  # America/Sao_Paulo está fixo em -03 (sem horário de verão desde 2019),
+  # então o offset numérico "-0300" sempre pode virar "-03" direto.
+  now=$(TZ=America/Sao_Paulo date '+%Y-%m-%d %H:%M %z')
+  now="${now%00}"
+  sed -i -E "s/(export const APP_BUILD = \")[^\"]*(\";)/\1${now}\2/" appvendas/assets/app.js
+  git add appvendas/assets/app.js
+fi
+
+if staged_files | grep -qx 'appvendas/assets/styles.css'; then
+  bump_query_version "./assets/styles.css"
+fi
+
+if staged_files | grep -qx 'appvendas/assets/pre-cadastro.js'; then
+  bump_query_version "./assets/pre-cadastro.js"
+fi

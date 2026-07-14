@@ -1,4 +1,6 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+// Versão exata pinada (em vez de "@2") para que uma release nova do
+// supabase-js não entre em produção sem passar por um commit e revisão.
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.5";
 
 // AppVendas — gestão de usuários (criar, editar, resetar senha, excluir).
 // Roda com a service role para poder falar com auth.admin.*; a autorização

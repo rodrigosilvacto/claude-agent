@@ -4,7 +4,7 @@
 
 import { supabase } from "./supabaseClient.js";
 import { callManageUsuarios, getCurrentUsuario } from "./auth.js";
-import { showToast, openModal, closeModal, confirmDialog, escapeHtml, skeletonTable, registerAutoRefresh, createSearchSelect } from "./app.js";
+import { showToast, openModal, closeModal, confirmDialog, escapeHtml, skeletonTable, registerAutoRefresh, createSearchSelect, friendlyPgError } from "./app.js";
 
 async function loadEmpresasOptions() {
   const { data } = await supabase
@@ -15,7 +15,7 @@ async function loadEmpresasOptions() {
   return (data || []).map((e) => ({ value: e.id, label: e.nome_fantasia, meta: e.codigo }));
 }
 
-const SEARCH_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>';
+const SEARCH_ICON = '<svg aria-hidden="true" focusable="false" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>';
 
 export async function render(view, actionsEl) {
   actionsEl.innerHTML = `<button type="button" class="btn btn--primary" id="btn-new">+ Novo usuário</button>`;
@@ -67,7 +67,7 @@ async function loadRows(view, term) {
   const card = view.querySelector(".card");
 
   if (error) {
-    card.innerHTML = `<div class="empty-state"><p class="empty-state__title">Erro ao carregar</p><p class="empty-state__hint">${escapeHtml(error.message)}</p></div>`;
+    card.innerHTML = `<div class="empty-state"><p class="empty-state__title">Erro ao carregar</p><p class="empty-state__hint">${escapeHtml(friendlyPgError(error))}</p></div>`;
     return;
   }
 

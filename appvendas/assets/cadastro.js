@@ -4,11 +4,16 @@
 // vez de triplicado.
 
 import { supabase } from "./supabaseClient.js";
-import { showToast, openModal, closeModal, confirmDialog, escapeHtml, skeletonTable, createSearchSelect, registerAutoRefresh } from "./app.js";
+import { showToast, openModal, closeModal, confirmDialog, escapeHtml, skeletonTable, createSearchSelect, registerAutoRefresh, friendlyPgError } from "./app.js";
 import { consultarCep } from "./cep.js";
 import { isAdmin } from "./auth.js";
 
-const SEARCH_ICON = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>';
+const SEARCH_ICON = '<svg aria-hidden="true" focusable="false" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>';
+
+// A tabela inteira era buscada a cada montagem, busca e refresh automático
+// (15s) — não escala à medida que a base cresce. PAGE_SIZE limita cada
+// requisição a uma página real, contada no servidor via `{ count: "exact" }`.
+const PAGE_SIZE = 50;
 
 // Telas marcadas com `scopeByEmpresa: true` (Clientes, Produtos,
 // Fornecedores) ganham, só para administradores, um campo "Empresa"
@@ -56,14 +61,17 @@ export async function renderCadastro(view, actionsEl, rawConfig) {
   `;
 
   const searchInput = view.querySelector("#search-input");
-  const state = { key: config.orderBy || "nome", asc: true };
+  const state = { key: config.orderBy || "nome", asc: true, page: 0 };
 
   actionsEl.querySelector("#btn-new").addEventListener("click", () => openForm(config, null, () => loadRows(config, view, searchInput.value.trim(), state)));
 
   let searchTimer = null;
   searchInput.addEventListener("input", () => {
     clearTimeout(searchTimer);
-    searchTimer = setTimeout(() => loadRows(config, view, searchInput.value.trim(), state), 250);
+    searchTimer = setTimeout(() => {
+      state.page = 0;
+      loadRows(config, view, searchInput.value.trim(), state);
+    }, 250);
   });
 
   await loadRows(config, view, "", state);
@@ -83,19 +91,29 @@ async function loadRows(config, view, term, state) {
     if (countEl) countEl.textContent = "";
   }
 
-  let query = supabase.from(config.table).select(config.selectQuery || "*");
+  let query = supabase.from(config.table).select(config.selectQuery || "*", { count: "exact" });
 
   if (term && config.searchColumns?.length) {
     const orFilter = config.searchColumns.map((col) => `${col}.ilike.%${term.replace(/[%,]/g, "")}%`).join(",");
     query = query.or(orFilter);
   }
 
-  const { data, error } = await query;
+  const from = state.page * PAGE_SIZE;
+  query = query.order(config.orderBy || "nome", { ascending: true }).range(from, from + PAGE_SIZE - 1);
+
+  const { data, error, count } = await query;
   const card = view.querySelector(".card");
 
   if (error) {
-    card.innerHTML = `<div class="empty-state"><p class="empty-state__title">Erro ao carregar</p><p class="empty-state__hint">${escapeHtml(error.message)}</p></div>`;
+    card.innerHTML = `<div class="empty-state"><p class="empty-state__title">Erro ao carregar</p><p class="empty-state__hint">${escapeHtml(friendlyPgError(error))}</p></div>`;
     return;
+  }
+
+  // Página ficou vazia (ex.: último registro da página foi excluído) — volta
+  // para a última página que ainda tem dados, em vez de mostrar tela em branco.
+  if ((!data || data.length === 0) && state.page > 0 && count > 0) {
+    state.page = Math.max(0, Math.ceil(count / PAGE_SIZE) - 1);
+    return loadRows(config, view, term, state);
   }
 
   if (!data || data.length === 0) {
@@ -103,9 +121,46 @@ async function loadRows(config, view, term, state) {
     return;
   }
 
-  if (countEl) countEl.textContent = `${data.length} registro${data.length === 1 ? "" : "s"}`;
+  if (countEl) {
+    const primeiro = from + 1;
+    const ultimo = from + data.length;
+    countEl.textContent = count > data.length || state.page > 0
+      ? `${primeiro}–${ultimo} de ${count} registro${count === 1 ? "" : "s"}`
+      : `${count} registro${count === 1 ? "" : "s"}`;
+  }
 
   renderTable(config, view, card, data, state);
+  renderPagination(config, view, term, state, count);
+}
+
+function renderPagination(config, view, term, state, count) {
+  const existing = view.querySelector(".pagination");
+  const totalPages = Math.max(1, Math.ceil(count / PAGE_SIZE));
+
+  if (totalPages <= 1) {
+    if (existing) existing.remove();
+    return;
+  }
+
+  const html = `
+    <div class="pagination">
+      <button type="button" class="btn btn--ghost btn--sm" id="page-prev" ${state.page === 0 ? "disabled" : ""}>‹ Anterior</button>
+      <span class="pagination__label">Página ${state.page + 1} de ${totalPages}</span>
+      <button type="button" class="btn btn--ghost btn--sm" id="page-next" ${state.page >= totalPages - 1 ? "disabled" : ""}>Próxima ›</button>
+    </div>
+  `;
+
+  if (existing) existing.outerHTML = html;
+  else view.insertAdjacentHTML("beforeend", html);
+
+  view.querySelector("#page-prev").addEventListener("click", () => {
+    state.page = Math.max(0, state.page - 1);
+    loadRows(config, view, term, state);
+  });
+  view.querySelector("#page-next").addEventListener("click", () => {
+    state.page += 1;
+    loadRows(config, view, term, state);
+  });
 }
 
 function sortData(data, config, state) {
@@ -186,10 +241,7 @@ function renderTable(config, view, card, data, state) {
       if (!ok) return;
       const { error } = await supabase.from(config.table).delete().eq("id", btn.dataset.delete);
       if (error) {
-        const friendly = error.code === "23503"
-          ? "Não é possível excluir: existem registros vinculados a este cadastro."
-          : error.message;
-        showToast(friendly, "error");
+        showToast(friendlyPgError(error, { 23503: "Não é possível excluir: existem registros vinculados a este cadastro." }), "error");
         return;
       }
       showToast(`${config.titleSingular} excluído.`);
@@ -212,7 +264,8 @@ async function openForm(config, existingRow, onSaved) {
   const optionsByField = {};
   for (const field of config.fields) {
     if ((field.type === "select" || field.type === "search-select") && field.optionsLoader) {
-      optionsByField[field.key] = await field.optionsLoader();
+      const dependsOnValue = field.dependsOn && existingRow ? existingRow[field.dependsOn] : undefined;
+      optionsByField[field.key] = await field.optionsLoader(existingRow, dependsOnValue);
     }
   }
 
@@ -233,12 +286,23 @@ async function openForm(config, existingRow, onSaved) {
   for (const field of config.fields) {
     if (field.type !== "search-select") continue;
     const mount = body.querySelector(`[data-search-select="${field.key}"]`);
+    // Campos que dependem de outro (ex.: fornecedor filtrado pela empresa
+    // escolhida) recarregam suas opções quando o campo do qual dependem muda,
+    // em vez de listar opções de todas as empresas de uma vez.
+    const dependents = config.fields.filter((f) => f.dependsOn === field.key && f.optionsLoader);
     searchSelects[field.key] = createSearchSelect({
       container: mount,
       placeholder: field.placeholder || `Buscar ${field.label.toLowerCase()}…`,
       options: optionsByField[field.key] || [],
       value: existingRow ? existingRow[field.key] : (field.default ?? null),
       allowClear: !field.required,
+      onChange: dependents.length
+        ? async (value) => {
+            for (const dep of dependents) {
+              searchSelects[dep.key]?.setOptions(await dep.optionsLoader(existingRow, value));
+            }
+          }
+        : undefined,
     });
   }
 
@@ -283,9 +347,7 @@ async function openForm(config, existingRow, onSaved) {
     const { error } = await query;
 
     if (error) {
-      const friendly = error.code === "23505"
-        ? "Já existe um registro com os mesmos dados (verifique se algum campo precisa ser único, como o documento)."
-        : error.message;
+      const friendly = friendlyPgError(error, { 23505: "Já existe um registro com os mesmos dados (verifique se algum campo precisa ser único, como o documento)." });
       errorEl.innerHTML = `<div class="form-error">${escapeHtml(friendly)}</div>`;
       return;
     }

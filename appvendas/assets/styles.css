@@ -474,6 +474,19 @@ svg {
   padding: 2.4rem 2.2rem 2.2rem;
 }
 
+/* Campo-armadilha (honeypot) contra bots de spam no pré-cadastro público:
+   escondido de gente de verdade sem usar display:none/hidden (que alguns
+   bots já sabem ignorar), mas continua acessível a leitores de tela — por
+   isso o aria-hidden explícito no próprio campo em pre-cadastro.html. */
+.hp-field {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
 .precadastro-title {
   font-family: var(--font-display);
   font-size: 1.5rem;
@@ -657,6 +670,20 @@ svg {
 }
 
 .record-count {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.pagination__label {
   font-size: 0.8rem;
   font-weight: 600;
   color: var(--text-muted);

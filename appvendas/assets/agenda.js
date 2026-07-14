@@ -7,17 +7,9 @@
 // em app.js e o handler de "Finalizar venda" em vendas.js).
 
 import { supabase } from "./supabaseClient.js";
-import { showToast, openModal, closeModal, confirmDialog, escapeHtml, createSearchSelect, registerAutoRefresh, setVendaPrefill } from "./app.js";
+import { showToast, openModal, closeModal, confirmDialog, escapeHtml, createSearchSelect, registerAutoRefresh, setVendaPrefill, withButtonLock, friendlyPgError } from "./app.js";
 import { isAdmin } from "./auth.js";
-
-async function loadEmpresasOptions() {
-  const { data } = await supabase
-    .from("empresas")
-    .select("id, nome_fantasia, codigo")
-    .eq("ativo", true)
-    .order("nome_fantasia", { ascending: true });
-  return (data || []).map((e) => ({ value: e.id, label: e.nome_fantasia, meta: e.codigo }));
-}
+import { loadClientesAtivos, loadProdutosAtivos, loadEmpresasAtivas, clienteSearchOptions, produtoSearchOptions, empresaSearchOptions } from "./catalogo.js";
 
 // Horário de atendimento padrão da loja — ajuste aqui se mudar.
 const HORARIOS = ["08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00"];
@@ -58,16 +50,6 @@ function horaAtual() {
   return `${String(new Date().getHours()).padStart(2, "0")}:00`;
 }
 
-async function loadClientes() {
-  const { data } = await supabase.from("clientes").select("id, nome, documento").eq("ativo", true).eq("status_cadastro", "aprovado").order("nome", { ascending: true });
-  return data || [];
-}
-
-async function loadProdutos() {
-  const { data } = await supabase.from("produtos").select("id, nome, sku").eq("ativo", true).order("nome", { ascending: true });
-  return data || [];
-}
-
 async function loadAgendamentos(startKey, endKey) {
   const { data, error } = await supabase
     .from("agendamentos")
@@ -91,7 +73,7 @@ async function loadResumoPorDia(startKey, endKey) {
 }
 
 export async function render(content) {
-  [clientesOptions, produtosOptions] = await Promise.all([loadClientes(), loadProdutos()]);
+  [clientesOptions, produtosOptions] = await Promise.all([loadClientesAtivos(), loadProdutosAtivos("id, nome, sku")]);
 
   const state = { view: "dia", anchor: new Date() };
 
@@ -280,7 +262,7 @@ async function renderDia(body, anchor, onChange) {
       if (!ok) return;
       const { error } = await supabase.from("agendamentos").delete().eq("id", btn.dataset.excluir);
       if (error) {
-        showToast(error.message, "error");
+        showToast(friendlyPgError(error), "error");
         return;
       }
       showToast("Agendamento excluído.");
@@ -444,7 +426,7 @@ async function openAgendamentoForm({ id = null, clienteId = null, produtoId = nu
   const editando = Boolean(id);
   const admin = isAdmin();
   const body = openModal(editando ? "Editar agendamento" : "Novo agendamento");
-  const empresasOptions = admin ? await loadEmpresasOptions() : [];
+  const empresasOptions = admin ? empresaSearchOptions(await loadEmpresasAtivas()) : [];
 
   body.innerHTML = `
     <form id="agenda-form">
@@ -498,7 +480,7 @@ async function openAgendamentoForm({ id = null, clienteId = null, produtoId = nu
   const clienteSelect = createSearchSelect({
     container: body.querySelector('[data-mount="ag-cliente"]'),
     placeholder: "Buscar cliente por nome ou documento… (opcional)",
-    options: clientesOptions.map((c) => ({ value: c.id, label: c.nome, meta: c.documento || "" })),
+    options: clienteSearchOptions(clientesOptions),
     value: clienteId,
     allowClear: true,
   });
@@ -506,7 +488,7 @@ async function openAgendamentoForm({ id = null, clienteId = null, produtoId = nu
   const produtoSelect = createSearchSelect({
     container: body.querySelector('[data-mount="ag-produto"]'),
     placeholder: "Buscar produto…",
-    options: produtosOptions.map((p) => ({ value: p.id, label: p.nome, meta: p.sku || "" })),
+    options: produtoSearchOptions(produtosOptions),
     value: produtoId,
     allowClear: true,
   });
@@ -537,44 +519,46 @@ async function openAgendamentoForm({ id = null, clienteId = null, produtoId = nu
 
   body.querySelector("#ag-cancel").addEventListener("click", closeModal);
 
-  body.querySelector("#agenda-form").addEventListener("submit", async (e) => {
+  body.querySelector("#agenda-form").addEventListener("submit", (e) => {
     e.preventDefault();
-    const errorEl = body.querySelector("#agenda-form-error");
-    errorEl.innerHTML = "";
+    withButtonLock(body.querySelector('#agenda-form button[type="submit"]'), async () => {
+      const errorEl = body.querySelector("#agenda-form-error");
+      errorEl.innerHTML = "";
 
-    const produtoIdSelecionado = produtoSelect.getValue();
-    if (!produtoIdSelecionado) {
-      errorEl.innerHTML = `<div class="form-error">Selecione um produto.</div>`;
-      return;
-    }
+      const produtoIdSelecionado = produtoSelect.getValue();
+      if (!produtoIdSelecionado) {
+        errorEl.innerHTML = `<div class="form-error">Selecione um produto.</div>`;
+        return;
+      }
 
-    if (admin && !empresaSelect.getValue()) {
-      errorEl.innerHTML = `<div class="form-error">Selecione uma empresa.</div>`;
-      return;
-    }
+      if (admin && !empresaSelect.getValue()) {
+        errorEl.innerHTML = `<div class="form-error">Selecione uma empresa.</div>`;
+        return;
+      }
 
-    const payload = {
-      cliente_id: clienteSelect.getValue() || null,
-      produto_id: produtoIdSelecionado,
-      data_agendamento: dataInput.value,
-      horario: horarioSelect.value,
-      observacoes: body.querySelector("#ag-obs").value || null,
-    };
-    if (admin) payload.empresa_id = empresaSelect.getValue();
+      const payload = {
+        cliente_id: clienteSelect.getValue() || null,
+        produto_id: produtoIdSelecionado,
+        data_agendamento: dataInput.value,
+        horario: horarioSelect.value,
+        observacoes: body.querySelector("#ag-obs").value || null,
+      };
+      if (admin) payload.empresa_id = empresaSelect.getValue();
 
-    const { error } = editando
-      ? await supabase.from("agendamentos").update(payload).eq("id", id)
-      : await supabase.from("agendamentos").insert(payload);
+      const { error } = editando
+        ? await supabase.from("agendamentos").update(payload).eq("id", id)
+        : await supabase.from("agendamentos").insert(payload);
 
-    if (error) {
-      const friendly = error.code === "23505" ? "Esse horário acabou de ser reservado por outra pessoa. Escolha outro." : error.message;
-      errorEl.innerHTML = `<div class="form-error">${escapeHtml(friendly)}</div>`;
-      await refreshHorarios();
-      return;
-    }
+      if (error) {
+        const friendly = friendlyPgError(error, { 23505: "Esse horário acabou de ser reservado por outra pessoa. Escolha outro." });
+        errorEl.innerHTML = `<div class="form-error">${escapeHtml(friendly)}</div>`;
+        await refreshHorarios();
+        return;
+      }
 
-    showToast(editando ? "Agendamento atualizado." : "Agendamento criado.");
-    closeModal();
-    if (onSaved) onSaved();
+      showToast(editando ? "Agendamento atualizado." : "Agendamento criado.");
+      closeModal();
+      if (onSaved) onSaved();
+    });
   });
 }
