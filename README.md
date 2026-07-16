@@ -166,3 +166,64 @@ O topo do painel (`reports/index.html`) também mostra dois horários de
 que aparece na tela estiver desatualizado em relação ao último commit, é
 cache do CDN/navegador, não bug de código. **Sempre que alterar `index.html`
 ou `app.js`, atualize esses dois timestamps também** (mesma lógica do `?v=N`).
+
+## Oráculo — conselhos via WhatsApp (`supabase/functions/oraculo-webhook`)
+
+Agente que dá conselhos pessoais e profissionais por WhatsApp. Sem painel
+web — a interface é a própria conversa no WhatsApp. Fluxo: Z-API recebe a
+mensagem no número conectado e chama o webhook (Edge Function
+`oraculo-webhook`); a function busca o histórico da conversa, chama a API
+da Anthropic (`claude-sonnet-5`) para gerar a resposta, salva o histórico e
+manda a resposta de volta pelo Z-API.
+
+- **Banco (migration `0010_create_oraculo_agent.sql`):** tabelas
+  `oraculo_conversas` (uma linha por telefone) e `oraculo_mensagens`
+  (histórico, `role` `user`/`assistant`). RLS habilitada **sem nenhuma
+  policy** — só a service role (usada dentro da function) acessa; nem
+  `anon` nem `authenticated` enxergam essas tabelas.
+- **Aberto a qualquer número** que mandar mensagem para o WhatsApp
+  conectado (não há allowlist). Para conter custo/abuso da API paga da
+  Anthropic, há rate limit de **20 mensagens por conversa a cada 15
+  minutos** — acima disso o Oráculo responde pedindo para aguardar, sem
+  chamar a Anthropic.
+- **Só texto no MVP:** áudio, imagem e documento recebidos geram uma
+  resposta automática pedindo para escrever em texto; não são processados.
+- **Idempotência:** o `messageId` do Z-API é gravado em
+  `zapi_message_id` (unique index parcial); se o Z-API reentregar a mesma
+  mensagem (retry), o insert é rejeitado e nada é reprocessado nem
+  reenviado ao usuário.
+
+### Setup
+
+1. Aplicar a migration `supabase/migrations/0010_create_oraculo_agent.sql`.
+2. Deploy da function **sem verificação de JWT** (quem chama é o Z-API, não
+   um cliente Supabase autenticado — mesmo racional de `mcp-cep` e
+   `share-report`):
+   ```
+   supabase functions deploy oraculo-webhook --no-verify-jwt
+   ```
+3. Configurar as secrets no projeto Supabase (`ClaudeProjects`):
+   ```
+   supabase secrets set \
+     ANTHROPIC_API_KEY=sk-ant-... \
+     ZAPI_INSTANCE_ID=... \
+     ZAPI_TOKEN=... \
+     ZAPI_CLIENT_TOKEN=... \
+     ORACULO_WEBHOOK_SECRET=<string aleatória sua>
+   ```
+   `ANTHROPIC_API_KEY` provavelmente já existe (usada pelo gerador de
+   LinkedIn) — só falta configurar as quatro do Z-API se ainda não
+   existirem.
+4. No painel do Z-API, configurar a URL de webhook "ao receber mensagem"
+   apontando para:
+   ```
+   https://<seu-projeto>.supabase.co/functions/v1/oraculo-webhook?secret=<ORACULO_WEBHOOK_SECRET>
+   ```
+   O `?secret=` é a única camada de autenticação do endpoint (Z-API não
+   assina o payload) — sem ele batendo com `ORACULO_WEBHOOK_SECRET`, a
+   function responde `401` e não processa nada.
+
+> **Custo:** o endpoint está aberto para qualquer número que mandar
+> mensagem para o WhatsApp conectado, e cada resposta consome créditos da
+> API da Anthropic. O rate limit por conversa é a única mitigação no MVP —
+> se o volume crescer, vale revisitar (allowlist, captcha, limite global).
