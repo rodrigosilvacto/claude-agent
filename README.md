@@ -186,12 +186,39 @@ manda a resposta de volta pelo Z-API.
   Anthropic, há rate limit de **20 mensagens por conversa a cada 15
   minutos** — acima disso o Oráculo responde pedindo para aguardar, sem
   chamar a Anthropic.
-- **Só texto no MVP:** áudio, imagem e documento recebidos geram uma
-  resposta automática pedindo para escrever em texto; não são processados.
+- **Texto e voz:** mensagem de texto gera resposta em texto. Mensagem de
+  áudio é transcrita pela API de speech-to-text da ElevenLabs (`scribe_v2`)
+  antes de entrar no fluxo normal, e a resposta é sintetizada de volta em
+  áudio pela API de text-to-speech da ElevenLabs (`eleven_multilingual_v2`,
+  mp3) e enviada como voice note pelo Z-API. Se a transcrição falhar, o
+  Oráculo pede para gravar de novo ou escrever; se a síntese/envio de voz
+  falhar, a resposta cai para texto em vez de se perder. Imagem e documento
+  ainda não são processados — geram uma resposta automática pedindo texto
+  ou áudio.
 - **Idempotência:** o `messageId` do Z-API é gravado em
   `zapi_message_id` (unique index parcial); se o Z-API reentregar a mesma
   mensagem (retry), o insert é rejeitado e nada é reprocessado nem
   reenviado ao usuário.
+- **Resumo por e-mail a pedido do usuário:** a Anthropic tem a ferramenta
+  `enviar_resumo_admin` disponível em toda mensagem, mas só a chama quando o
+  usuário pede explicitamente para mandar um resumo/relatório da conversa
+  para o administrador (ex: "manda um resumo disso pro suporte"). Não há
+  envio automático nem periódico — é sempre a pedido, dentro da própria
+  conversa. Quando chamada, a function busca o histórico completo daquela
+  conversa (não só a janela de `HISTORICO_LIMITE`) e pede à Anthropic, numa
+  chamada separada, para **separar a conversa por assunto** (ex: carreira,
+  relacionamento, finanças) — cada assunto identificado entra no e-mail com
+  seu próprio resumo + conclusão sobre o desfecho. Uma conversa de assunto
+  único gera só um bloco. O e-mail é mandado via Resend para
+  `ORACULO_RESUMO_EMAIL`. Se falhar em qualquer etapa, o Oráculo avisa o
+  usuário em vez de fingir que enviou.
+  > **Entregabilidade:** o remetente usado é o sandbox `onboarding@resend.dev`
+  > (sem domínio próprio verificado). A Resend confirma entrega
+  > (`last_event: "delivered"`), mas provedores como Hotmail/Outlook podem
+  > descartar ou filtrar silenciosamente e-mails desse remetente sem
+  > reputação de domínio própria — se o e-mail não aparecer nem no Spam,
+  > isso é o motivo mais provável. Verificar um domínio próprio no Resend e
+  > trocar a constante `RESEND_FROM` resolve isso definitivamente.
 
 ### Setup
 
@@ -209,11 +236,21 @@ manda a resposta de volta pelo Z-API.
      ZAPI_INSTANCE_ID=... \
      ZAPI_TOKEN=... \
      ZAPI_CLIENT_TOKEN=... \
-     ORACULO_WEBHOOK_SECRET=<string aleatória sua>
+     ORACULO_WEBHOOK_SECRET=<string aleatória sua> \
+     ELEVENLABS_API_KEY=... \
+     ELEVENLABS_VOICE_ID=<id da voz escolhida na sua conta ElevenLabs> \
+     RESEND_API_KEY=re_... \
+     ORACULO_RESUMO_EMAIL=rodrigosilvapmp@hotmail.com
    ```
    `ANTHROPIC_API_KEY` provavelmente já existe (usada pelo gerador de
-   LinkedIn) — só falta configurar as quatro do Z-API se ainda não
-   existirem.
+   LinkedIn) — só falta configurar as demais se ainda não existirem.
+   `ELEVENLABS_VOICE_ID` é o id de uma voz da sua biblioteca na ElevenLabs
+   (painel ElevenLabs → Voices → copiar o Voice ID). O remetente do e-mail
+   usado no código é o sandbox `onboarding@resend.dev`, que só entrega para
+   o e-mail cadastrado na própria conta Resend — por isso `ORACULO_RESUMO_EMAIL`
+   precisa ser esse mesmo e-mail, a menos que um domínio próprio seja
+   verificado no Resend (nesse caso, troque a constante `RESEND_FROM` em
+   `supabase/functions/oraculo-webhook/index.ts`).
 4. No painel do Z-API, configurar a URL de webhook "ao receber mensagem"
    apontando para:
    ```
@@ -225,5 +262,9 @@ manda a resposta de volta pelo Z-API.
 
 > **Custo:** o endpoint está aberto para qualquer número que mandar
 > mensagem para o WhatsApp conectado, e cada resposta consome créditos da
-> API da Anthropic. O rate limit por conversa é a única mitigação no MVP —
-> se o volume crescer, vale revisitar (allowlist, captcha, limite global).
+> API da Anthropic — e, quando a conversa é por voz, também créditos de
+> speech-to-text e text-to-speech da ElevenLabs. Pedir repetidamente o envio
+> de resumo (`enviar_resumo_admin`) soma mais uma chamada à Anthropic e um
+> envio pelo Resend por pedido — mesmo rate limit por conversa cobre esse
+> caso. O rate limit por conversa é a única mitigação no MVP — se o volume
+> crescer, vale revisitar (allowlist, captcha, limite global).
