@@ -2,7 +2,19 @@
 // (toast, modal, confirmação, formatação). Cada módulo de tela expõe
 // `render(view)` e monta seu próprio HTML dentro do container recebido.
 
-import { initAuth, isLoggedIn, isAdmin, getCurrentUsuario, signOut, onAuthChange } from "./auth.js";
+import { initAuth, isLoggedIn, isAdmin, isGlobalAdmin, getCurrentUsuario, signOut, onAuthChange } from "./auth.js";
+
+// Usados como fallback quando a empresa do usuário logado não tem
+// `nome_aplicacao` configurado (ou quando o usuário é admin global, sem
+// empresa vinculada). A tela de login sempre mostra este nome — antes de
+// autenticar não há como saber a qual empresa a pessoa pertence.
+export const DEFAULT_APP_NAME = "BjjConnect";
+const DEFAULT_APP_MARK = "BC";
+
+// Chaves em ROUTES que representam itens de menu operacionais que podem ser
+// escondidos por empresa (configurável em Administração > Configurações).
+// Início e o grupo Administração nunca entram nessa lista.
+const CONFIGURABLE_MENU_KEYS = ["clientes", "produtos", "fornecedores", "vendas", "agenda", "contas-receber", "contas-pagar", "relatorios"];
 
 // Atualize este timestamp a cada mudança em app.js — é como a sidebar mostra
 // se o navegador está com uma cópia antiga em cache (ver #sidebar-build
@@ -12,7 +24,7 @@ import { initAuth, isLoggedIn, isAdmin, getCurrentUsuario, signOut, onAuthChange
 // ES modules carregar duas instâncias do módulo (hashchange listener e
 // boot() duplicados). Ver commit e4f8448 (correção original) e 3659424/
 // e75bd3a (reintrodução e reversão do bug).
-export const APP_BUILD = "2026-07-14 14:43 -03";
+export const APP_BUILD = "2026-07-19 21:03 -03";
 
 const ROUTES = {
   home: {
@@ -72,6 +84,13 @@ const ROUTES = {
     load: () => import("./usuarios.js"),
     adminOnly: true,
   },
+  configuracoes: {
+    breadcrumb: "Administração",
+    title: "Configurações",
+    load: () => import("./configuracoes.js"),
+    adminOnly: true,
+    globalAdminOnly: true,
+  },
 };
 
 const DEFAULT_ROUTE = "home";
@@ -83,6 +102,9 @@ const topbarActionsEl = document.getElementById("topbar-actions");
 const navLinks = Array.from(document.querySelectorAll(".nav-link"));
 const navUsuarios = document.getElementById("nav-usuarios");
 const navEmpresas = document.getElementById("nav-empresas");
+const navConfiguracoes = document.getElementById("nav-configuracoes");
+const sidebarBrandMark = document.getElementById("sidebar-brand-mark");
+const sidebarBrandName = document.getElementById("sidebar-brand-name");
 const userChipAvatar = document.getElementById("user-chip-avatar");
 const userChipName = document.getElementById("user-chip-name");
 const userChipMeta = document.getElementById("user-chip-meta");
@@ -107,6 +129,7 @@ function updateAuthUI() {
   appShell.classList.toggle("is-locked", !logged);
   navUsuarios.hidden = !isAdmin();
   navEmpresas.hidden = !isAdmin();
+  navConfiguracoes.hidden = !isGlobalAdmin();
 
   if (usuario) {
     userChipAvatar.textContent = initials(usuario.nome);
@@ -117,6 +140,38 @@ function updateAuthUI() {
     userChipName.textContent = "—";
     userChipMeta.textContent = "—";
   }
+
+  applyBranding(usuario);
+  applyMenuVisibility(usuario);
+}
+
+// Nome/mark customizados valem só depois do login, pra usuários vinculados a
+// uma empresa com `nome_aplicacao` preenchido — admins globais (sem empresa)
+// e a tela de login sempre usam o padrão, já que antes de autenticar não dá
+// pra saber de qual empresa é o usuário.
+function applyBranding(usuario) {
+  const custom = usuario?.empresa?.nome_aplicacao?.trim();
+  const nome = custom || DEFAULT_APP_NAME;
+  document.title = nome;
+  sidebarBrandName.textContent = nome;
+  sidebarBrandMark.textContent = custom
+    ? custom.replace(/\s+/g, "").slice(0, 2).toUpperCase() || DEFAULT_APP_MARK
+    : DEFAULT_APP_MARK;
+}
+
+function menusHabilitadosDe(usuario) {
+  return usuario?.empresa?.menus_habilitados || {};
+}
+
+// Admin global (sem empresa) não tem `usuario.empresa`, então o mapa fica
+// vazio e nada é escondido — condiz com o fato de esse papel enxergar dados
+// de todas as empresas nas próprias telas (RLS libera por is_admin()).
+function applyMenuVisibility(usuario) {
+  const menus = menusHabilitadosDe(usuario);
+  CONFIGURABLE_MENU_KEYS.forEach((key) => {
+    const link = document.querySelector(`.nav-link[data-route="${key}"]`);
+    if (link) link.hidden = menus[key] === false;
+  });
 }
 
 logoutBtn.addEventListener("click", async () => {
@@ -147,7 +202,11 @@ async function renderRoute() {
 
   const hash = window.location.hash.replace(/^#\//, "").split("?")[0];
   let routeKey = ROUTES[hash] ? hash : DEFAULT_ROUTE;
-  if (ROUTES[routeKey].adminOnly && !isAdmin()) {
+  const menus = menusHabilitadosDe(getCurrentUsuario());
+  const blocked = (ROUTES[routeKey].adminOnly && !isAdmin())
+    || (ROUTES[routeKey].globalAdminOnly && !isGlobalAdmin())
+    || menus[routeKey] === false;
+  if (blocked) {
     routeKey = DEFAULT_ROUTE;
     // replaceState em vez de mudar window.location.hash: corrige a URL sem
     // disparar um "hashchange" que renderizaria a rota padrão de novo.

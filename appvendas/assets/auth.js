@@ -30,7 +30,7 @@ async function loadUsuario(userId) {
   if (!userId) return null;
   const { data } = await supabase
     .from("usuarios")
-    .select("id, nome, login, role, ativo, empresa_id")
+    .select("id, nome, login, role, ativo, empresa_id, empresa:empresas(nome_aplicacao, menus_habilitados)")
     .eq("id", userId)
     .maybeSingle();
   return data || null;
@@ -151,6 +151,14 @@ export function isLoggedIn() {
 
 export function isAdmin() {
   return Boolean(currentUsuario && currentUsuario.role === "admin" && currentUsuario.ativo);
+}
+
+// Admin não vinculado a nenhuma empresa (empresa_id nulo) — o único papel que
+// pode configurar a "casca" do app (nome exibido + menus) de qualquer
+// empresa. Um admin vinculado a uma empresa específica passa em isAdmin() mas
+// não neste.
+export function isGlobalAdmin() {
+  return Boolean(isAdmin() && currentUsuario.empresa_id == null);
 }
 
 export function getCurrentEmpresaId() {
