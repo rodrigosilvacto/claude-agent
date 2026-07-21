@@ -991,6 +991,8 @@ svg {
 .status--manual { color: var(--amber-deep); background: var(--amber-soft); }
 .status--matricula { color: var(--info-deep); background: var(--info-soft); }
 .status--atrasada { color: var(--danger-deep); background: var(--danger-soft); }
+.status--entrada { color: var(--accent-deep); background: var(--accent-soft); }
+.status--saida { color: var(--danger-deep); background: var(--danger-soft); }
 
 /* ── Empty state ───────────────────────────────────────────────────── */
 
