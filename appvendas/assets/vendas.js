@@ -508,13 +508,15 @@ async function showDetail(vendaId) {
   const body = openModal("Detalhes da venda");
   body.innerHTML = `<div class="empty-state">Carregando…</div>`;
 
-  const [{ data: venda }, { data: itens }] = await Promise.all([
+  const [{ data: venda, error: vendaError }, { data: itens }] = await Promise.all([
     supabase.from("vendas").select("*, cliente:clientes(nome)").eq("id", vendaId).single(),
     supabase.from("venda_itens").select("*, produto:produtos(nome)").eq("venda_id", vendaId),
   ]);
 
   if (!venda) {
-    body.innerHTML = `<div class="empty-state">Venda não encontrada.</div>`;
+    body.innerHTML = vendaError
+      ? `<div class="empty-state"><p class="empty-state__title">Não foi possível carregar a venda</p><p class="empty-state__hint">${escapeHtml(friendlyPgError(vendaError))}</p></div>`
+      : `<div class="empty-state">Venda não encontrada.</div>`;
     return;
   }
 

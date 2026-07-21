@@ -15,6 +15,24 @@ function escapeHtml(str) {
   }[c]));
 }
 
+// Duplicado localmente (em vez de importar friendlyPgError de app.js) pelo
+// mesmo motivo do escapeHtml acima: esta página roda isolada de app.js de
+// propósito. `pre_cadastro_cliente` (migration 0005) já fala em português
+// nas próprias validações — essas chegam com SQLSTATE P0001 (RAISE
+// EXCEPTION do plpgsql) e são exibidas como estão; qualquer outro erro
+// (rede, RLS, coluna) não deve vazar a mensagem técnica crua do Postgres
+// pra quem está preenchendo um formulário público.
+const PG_ERROR_MESSAGES = {
+  23505: "Já existe um cadastro com estes dados.",
+  23502: "Preencha todos os campos obrigatórios.",
+};
+
+function friendlyRpcError(error) {
+  if (!error) return "Ocorreu um erro inesperado.";
+  if (error.code === "P0001") return error.message;
+  return PG_ERROR_MESSAGES[error.code] || "Não foi possível enviar seu cadastro. Tente novamente em instantes.";
+}
+
 const form = document.getElementById("precadastro-form");
 const errorEl = document.getElementById("precadastro-error");
 const submitBtn = document.getElementById("precadastro-submit");
@@ -100,7 +118,7 @@ form.addEventListener("submit", async (e) => {
   const { data, error } = await supabase.rpc("pre_cadastro_cliente", payload);
 
   if (error) {
-    errorEl.innerHTML = `<div class="form-error">${escapeHtml(error.message)}</div>`;
+    errorEl.innerHTML = `<div class="form-error">${escapeHtml(friendlyRpcError(error))}</div>`;
     submitBtn.disabled = false;
     submitBtn.textContent = "Enviar cadastro";
     return;

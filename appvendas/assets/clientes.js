@@ -68,7 +68,8 @@ export async function render(view, actionsEl) {
     let query = "";
     const empresaId = getCurrentEmpresaId();
     if (empresaId) {
-      const { data: empresa } = await supabase.from("empresas").select("codigo").eq("id", empresaId).maybeSingle();
+      const { data: empresa, error } = await supabase.from("empresas").select("codigo").eq("id", empresaId).maybeSingle();
+      if (error) showToast(friendlyPgError(error), "error");
       if (empresa?.codigo) query = `?empresa=${encodeURIComponent(empresa.codigo)}`;
     }
     const url = `${window.location.origin}${basePath}pre-cadastro.html${query}`;

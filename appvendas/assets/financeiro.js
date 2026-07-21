@@ -7,10 +7,11 @@
 // mesmo padrão de criar_venda/cancelar_venda.
 
 import { supabase } from "./supabaseClient.js";
-import { showToast, openModal, closeModal, confirmDialog, formatCurrency, formatDate, escapeHtml, createSearchSelect, registerAutoRefresh, withButtonLock, friendlyPgError, exportCsv } from "./app.js";
+import { showToast, openModal, closeModal, confirmDialog, formatCurrency, formatDate, formatCsvNumber, escapeHtml, createSearchSelect, registerAutoRefresh, withButtonLock, friendlyPgError, exportCsv } from "./app.js";
 import { isAdmin, getCurrentEmpresaId } from "./auth.js";
 import { loadClientesAtivos, loadProdutosVendaveis, loadEmpresasAtivas, clienteSearchOptions, produtoSearchOptions, empresaSearchOptions, produtoMetaPrecoEstoque } from "./catalogo.js";
 import { openPagamentoParcelaForm } from "./matriculas.js";
+import { todayStr, firstDayOfMonthStr, statCard, periodoToolbarHtml, wirePeriodoToolbar, paginacaoHtml, wirePaginacao } from "./financeiro-ui.js";
 
 const FORMAS_PAGAMENTO = ["Dinheiro", "Pix", "Cartão de crédito", "Cartão de débito", "Boleto"];
 
@@ -25,14 +26,6 @@ const PAGE_SIZE = 50;
 let clientesOptions = [];
 let produtosOptions = [];
 let empresasOptions = [];
-
-function todayStr() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function firstDayOfMonthStr() {
-  return `${todayStr().slice(0, 7)}-01`;
-}
 
 // Última data do mês atual + `monthsAhead` meses à frente — usado só como
 // teto padrão do filtro "Até". Sem isso, o "Até" parava em hoje e as
@@ -63,61 +56,16 @@ export async function render(view, actionsEl) {
     exportCsv(
       `contas-a-receber_${state.inicio}_a_${state.fim}.csv`,
       ["Data", "Origem", "Cliente", "Item(ns)", "Forma de pagamento", "Valor", "Status"],
-      state.linhas.map((l) => [l.data, ORIGEM_LABEL[l.origem]?.(l) || l.origem, l.cliente, l.itens, l.formaPagamento || "", l.valor.toFixed(2).replace(".", ","), (STATUS_META[l.status] || { label: l.status }).label]),
+      state.linhas.map((l) => [l.data, ORIGEM_LABEL[l.origem]?.(l) || l.origem, l.cliente, l.itens, l.formaPagamento || "", formatCsvNumber(l.valor), (STATUS_META[l.status] || { label: l.status }).label]),
     );
   });
 
   view.innerHTML = `
-    <div class="toolbar financeiro-filtro">
-      <div class="field" style="flex: 0 0 160px;">
-        <label for="cr-inicio">De</label>
-        <input class="input" type="date" id="cr-inicio" value="${state.inicio}" />
-      </div>
-      <div class="field" style="flex: 0 0 160px;">
-        <label for="cr-fim">Até</label>
-        <input class="input" type="date" id="cr-fim" value="${state.fim}" />
-      </div>
-      <div class="field" style="flex: 0 0 auto;">
-        <label>&nbsp;</label>
-        <button type="button" class="btn btn--ghost" id="cr-filtrar">Filtrar</button>
-      </div>
-      <div class="field" style="flex: 0 0 auto; margin-left: auto;">
-        <label>&nbsp;</label>
-        <label style="display:flex; align-items:center; gap:0.45rem; white-space:nowrap; font-weight:600; cursor:pointer;">
-          <input type="checkbox" id="cr-somente-pendentes" />
-          Só pendentes (todos os vencimentos)
-        </label>
-      </div>
-    </div>
+    ${periodoToolbarHtml({ prefix: "cr", inicio: state.inicio, fim: state.fim })}
     <div id="cr-content"><div class="empty-state">Carregando…</div></div>
   `;
 
-  const inicioInput = view.querySelector("#cr-inicio");
-  const fimInput = view.querySelector("#cr-fim");
-  const filtrarBtn = view.querySelector("#cr-filtrar");
-  const somentePendentesInput = view.querySelector("#cr-somente-pendentes");
-
-  function syncFiltroDatasDisabled() {
-    const disabled = state.somentePendentes;
-    inicioInput.disabled = disabled;
-    fimInput.disabled = disabled;
-    filtrarBtn.disabled = disabled;
-  }
-  syncFiltroDatasDisabled();
-
-  filtrarBtn.addEventListener("click", () => {
-    state.inicio = inicioInput.value || state.inicio;
-    state.fim = fimInput.value || state.fim;
-    state.page = 0;
-    load(view, state);
-  });
-
-  somentePendentesInput.addEventListener("change", () => {
-    state.somentePendentes = somentePendentesInput.checked;
-    state.page = 0;
-    syncFiltroDatasDisabled();
-    load(view, state);
-  });
+  wirePeriodoToolbar(view, { prefix: "cr", state, onChange: () => load(view, state) });
 
   await load(view, state);
 
@@ -250,13 +198,7 @@ function renderContent(view, state) {
     <div class="card card-section">
       <p class="section-title">${sectionTitle}</p>
       ${renderTabela(linhasPagina, emptyMessage)}
-      ${totalPages > 1 ? `
-        <div class="pagination">
-          <button type="button" class="btn btn--ghost btn--sm" id="cr-page-prev" ${state.page === 0 ? "disabled" : ""}>‹ Anterior</button>
-          <span class="pagination__label">Página ${state.page + 1} de ${totalPages}</span>
-          <button type="button" class="btn btn--ghost btn--sm" id="cr-page-next" ${state.page >= totalPages - 1 ? "disabled" : ""}>Próxima ›</button>
-        </div>
-      ` : ""}
+      ${paginacaoHtml("cr", state.page, totalPages)}
     </div>
   `;
 
@@ -281,25 +223,7 @@ function renderContent(view, state) {
     });
   });
 
-  if (totalPages > 1) {
-    content.querySelector("#cr-page-prev").addEventListener("click", () => {
-      state.page = Math.max(0, state.page - 1);
-      renderContent(view, state);
-    });
-    content.querySelector("#cr-page-next").addEventListener("click", () => {
-      state.page += 1;
-      renderContent(view, state);
-    });
-  }
-}
-
-function statCard(label, value, tagColor) {
-  return `
-    <div class="card stat-card" style="--tag-color:${tagColor}">
-      <p class="stat-card__label">${escapeHtml(label)}</p>
-      <p class="stat-card__value">${value}</p>
-    </div>
-  `;
+  wirePaginacao(content, "cr", state, totalPages, () => renderContent(view, state));
 }
 
 // "Recebido" = já entrou (vendas, manual, parcelas pagas). Parcelas

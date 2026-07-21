@@ -24,7 +24,7 @@ const CONFIGURABLE_MENU_KEYS = ["clientes", "produtos", "fornecedores", "vendas"
 // ES modules carregar duas instâncias do módulo (hashchange listener e
 // boot() duplicados). Ver commit e4f8448 (correção original) e 3659424/
 // e75bd3a (reintrodução e reversão do bug).
-export const APP_BUILD = "2026-07-21 15:40 -03";
+export const APP_BUILD = "2026-07-21 17:20 -03";
 
 const ROUTES = {
   home: {
@@ -87,6 +87,12 @@ const ROUTES = {
     title: "Empresas",
     load: () => import("./empresas.js"),
     adminOnly: true,
+    // Gestão de empresas (criar, editar cadastro de outras empresas) é
+    // exclusiva de admin global desde a migration 0020 — um admin de
+    // empresa que chegasse aqui só veria a própria empresa e teria
+    // qualquer tentativa de salvar rejeitada pela RLS. Mesmo racional de
+    // "configuracoes" abaixo.
+    globalAdminOnly: true,
   },
   usuarios: {
     breadcrumb: "Administração",
@@ -138,7 +144,7 @@ function updateAuthUI() {
 
   appShell.classList.toggle("is-locked", !logged);
   navUsuarios.hidden = !isAdmin();
-  navEmpresas.hidden = !isAdmin();
+  navEmpresas.hidden = !isGlobalAdmin();
   navConfiguracoes.hidden = !isGlobalAdmin();
 
   if (usuario) {
@@ -635,6 +641,13 @@ export function consumeMatriculaPrefill() {
 function escapeCsvValue(value) {
   const str = String(value ?? "");
   return /[";\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+}
+
+// Número em formato pt-BR (vírgula decimal) para uma célula de CSV — usar
+// em vez de formatCurrency porque o CSV não deve carregar o símbolo "R$"
+// junto do valor.
+export function formatCsvNumber(value) {
+  return Number(value || 0).toFixed(2).replace(".", ",");
 }
 
 export function exportCsv(filename, headers, rows) {

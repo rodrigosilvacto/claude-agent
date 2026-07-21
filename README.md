@@ -83,6 +83,30 @@ desabilitado**, ver abaixo.
 3. Magic link (Email OTP) no Supabase Auth pode continuar habilitado sem
    problema — o painel simplesmente não exige mais uma sessão para funcionar.
 
+### Hospedagem (GitHub Pages) e cache
+
+O painel é servido via GitHub Pages a partir deste repositório. `styles.css`,
+`app.js` e `supabaseClient.js` são referenciados com `?v=N` (ex:
+`./assets/app.js?v=3`) para forçar o navegador a buscar a versão nova depois
+de cada deploy — sem isso, o CDN do GitHub Pages e o cache do navegador podem
+continuar servindo a versão antiga por vários minutos mesmo depois do merge.
+**Sempre que alterar `styles.css`, `app.js` ou `supabaseClient.js`, incremente
+esse número em todos os arquivos que os referenciam** (`index.html`,
+`login.html`, `share.html`, e o `import` dentro do próprio `app.js`).
+
+O topo do painel (`reports/index.html`) também mostra dois horários de
+"deploy": um fixo no HTML (`index.html`) e outro escrito via JS
+(`APP_JS_BUILD`, em `assets/app.js`). Servem para diagnosticar cache: se o
+que aparece na tela estiver desatualizado em relação ao último commit, é
+cache do CDN/navegador, não bug de código. **Sempre que alterar `index.html`
+ou `app.js`, atualize esses dois timestamps também** (mesma lógica do `?v=N`).
+
+> Esta seção é específica do Reports Panel — não confundir com o AppVendas
+> logo abaixo, que segue uma regra diferente e mais restrita (ver "Cache do
+> `app.js`" na seção AppVendas): lá, só `styles.css` é versionado com
+> `?v=N`; o entry point e os imports internos (`app.js`, `supabaseClient.js`)
+> não podem ser, sob pena de duplicar a instância do módulo.
+
 ## AppVendas (`/appvendas`)
 
 Aplicação corporativa de gestão de vendas: menu lateral com **Cadastros**
@@ -111,8 +135,7 @@ estático + Supabase, sem build, no projeto `ClaudeProjects`.
 
 **Banco (migration `0004_create_appvendas_schema.sql`, já aplicada no
 projeto `ClaudeProjects`):** tabelas `clientes`, `fornecedores`, `produtos`,
-`vendas`, `venda_itens`. RLS pública (mesmo racional da migration `0003` —
-piloto interno sem login). A baixa e devolução de estoque acontecem dentro
+`vendas`, `venda_itens`. A baixa e devolução de estoque acontecem dentro
 de funções Postgres (`criar_venda`/`cancelar_venda`, `security definer`)
 para garantir atomicidade: se algum item não tiver estoque suficiente, a
 venda inteira é revertida. A tabela `agendamentos` (usada por `agenda.js`)
@@ -120,14 +143,33 @@ venda inteira é revertida. A tabela `agendamentos` (usada por `agenda.js`)
 diretamente no projeto Supabase; vale registrar essa migration
 retroativamente se mexer no schema de novo.
 
-> **Sem login (mesmo racional do Reports Panel):** acesso liberado para
-> quem tiver a URL, via `anon key`. Reavaliar antes de expor além do
-> piloto interno.
+> **Login real desde a migration `0005`** (esta seção descrevia "sem
+> login/RLS pública" — isso valia só para o schema inicial da `0004` e
+> ficou desatualizado). Hoje o acesso exige sessão (usuário/senha, ver
+> `auth.js`) e RLS multiempresa por `empresa_id`: um usuário normal só
+> enxerga/edita dados da própria empresa; `role = 'admin'` **sem**
+> `empresa_id` (admin "global") enxerga todas. A migration `0020` fechou um
+> escalonamento de privilégio em que um admin vinculado a uma única empresa
+> conseguia se promover a admin global ou mexer em usuários/empresas de
+> fora da própria — ver `supabase/functions/manage-usuarios/index.ts` e as
+> policies de `usuarios`/`empresas`. Por isso a tela **Empresas** (menu
+> Administração) passou a exigir admin global, mesmo racional que já valia
+> para **Configurações**.
 
-> **Conta de teste (role `caixa`):** login `qa.appvendas`, senha
-> `AppVendasQA2026!`. Criada só para validar telas end-to-end (Vendas,
-> Agendamento) sem usar uma conta pessoal. Rotacionar/remover antes de
-> abrir o app além do piloto interno — mesma lógica de "sem login" acima.
+> **Criação do primeiro admin exige um segredo de bootstrap:** com a
+> tabela `usuarios` vazia, `manage-usuarios` aceita criar o primeiro
+> administrador sem sessão (ninguém consegue estar logado ainda) — mas só
+> se o payload incluir `bootstrap_secret` batendo com a secret
+> `APPVENDAS_BOOTSTRAP_SECRET` do projeto Supabase. Configure com
+> `supabase secrets set APPVENDAS_BOOTSTRAP_SECRET=<string aleatória sua>`
+> **antes** de fazer o setup inicial, e chame a function uma vez (ex. via
+> `curl`) com esse valor. Sem a secret configurada, a criação do primeiro
+> admin é sempre rejeitada.
+
+> **Conta de teste (role `caixa`):** existe uma conta de teste (`qa.appvendas`)
+> usada para validar telas end-to-end (Vendas, Agendamento) sem usar uma
+> conta pessoal — a senha está no gerenciador de senhas interno, não neste
+> arquivo. Rotacionar/remover antes de abrir o app além do piloto interno.
 
 ### Cache do `app.js` — NÃO adicione `?v=N` no `<script>` de entrada
 
@@ -148,24 +190,6 @@ Para diagnosticar cache antigo sem versionar o script: a sidebar mostra
 `#sidebar-build` em `index.html`). Se a data não bater com o timestamp do
 último commit em `app.js`, é cache do navegador/CDN do GitHub Pages — peça
 um hard refresh (Ctrl+Shift+R), não mexa no `<script src>`.
-
-### Hospedagem (GitHub Pages) e cache
-
-O painel é servido via GitHub Pages a partir deste repositório. `styles.css`,
-`app.js` e `supabaseClient.js` são referenciados com `?v=N` (ex:
-`./assets/app.js?v=3`) para forçar o navegador a buscar a versão nova depois
-de cada deploy — sem isso, o CDN do GitHub Pages e o cache do navegador podem
-continuar servindo a versão antiga por vários minutos mesmo depois do merge.
-**Sempre que alterar `styles.css`, `app.js` ou `supabaseClient.js`, incremente
-esse número em todos os arquivos que os referenciam** (`index.html`,
-`login.html`, `share.html`, e o `import` dentro do próprio `app.js`).
-
-O topo do painel (`reports/index.html`) também mostra dois horários de
-"deploy": um fixo no HTML (`index.html`) e outro escrito via JS
-(`APP_JS_BUILD`, em `assets/app.js`). Servem para diagnosticar cache: se o
-que aparece na tela estiver desatualizado em relação ao último commit, é
-cache do CDN/navegador, não bug de código. **Sempre que alterar `index.html`
-ou `app.js`, atualize esses dois timestamps também** (mesma lógica do `?v=N`).
 
 ## Oráculo — conselhos via WhatsApp (`supabase/functions/oraculo-webhook`)
 

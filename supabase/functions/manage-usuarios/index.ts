@@ -14,6 +14,11 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.5";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+// Exigido só na criação do primeiro admin (nenhum usuário cadastrado ainda,
+// logo ninguém consegue estar logado para essa chamada). Sem isso, quem
+// descobrisse a URL do projeto antes do setup real terminar largava na
+// frente e virava o primeiro (e único) admin. Ver README, seção AppVendas.
+const BOOTSTRAP_SECRET = Deno.env.get("APPVENDAS_BOOTSTRAP_SECRET") || "";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -73,33 +78,48 @@ Deno.serve(async (req: Request) => {
   const isBootstrap = (count || 0) === 0;
 
   let callerIsAdmin = false;
+  let callerEmpresaId: string | null = null;
   if (caller && !isBootstrap) {
     const { data: callerRow } = await admin
       .from("usuarios")
-      .select("role, ativo")
+      .select("role, ativo, empresa_id")
       .eq("id", caller.id)
       .maybeSingle();
     callerIsAdmin = Boolean(callerRow && callerRow.role === "admin" && callerRow.ativo);
+    callerEmpresaId = callerRow?.empresa_id ?? null;
   }
+  // Admin "global" = admin sem empresa vinculada — mesmo critério do
+  // front-end (auth.js: isGlobalAdmin) e das RLS policies (is_global_admin()
+  // na migration 0020). Só ele pode mexer em usuários/empresas fora da
+  // própria empresa.
+  const callerIsGlobalAdmin = callerIsAdmin && callerEmpresaId === null;
 
   if (isBootstrap) {
     if (body.action !== "create") {
       return json({ error: "Nenhum usuário cadastrado ainda. Cadastre o primeiro administrador." }, 400);
+    }
+    if (!BOOTSTRAP_SECRET || String(body.bootstrap_secret || "") !== BOOTSTRAP_SECRET) {
+      return json({ error: "Código de inicialização ausente ou incorreto." }, 403);
     }
     body.role = "admin";
   } else if (!callerIsAdmin) {
     return json({ error: "Acesso restrito a administradores." }, 403);
   }
 
+  // No bootstrap, ninguém está logado ainda (caller é null) — trata como
+  // "global admin" para fins de handleCreate, senão a checagem abaixo
+  // travaria empresa_id como se fosse um admin de empresa sem empresa.
+  const canCreateAcrossEmpresas = isBootstrap || callerIsGlobalAdmin;
+
   switch (body.action) {
     case "create":
-      return await handleCreate(admin, body);
+      return await handleCreate(admin, body, canCreateAcrossEmpresas, callerEmpresaId);
     case "update":
-      return await handleUpdate(admin, body, caller);
+      return await handleUpdate(admin, body, caller, callerIsGlobalAdmin, callerEmpresaId);
     case "reset_password":
-      return await handleResetPassword(admin, body);
+      return await handleResetPassword(admin, body, callerIsGlobalAdmin, callerEmpresaId);
     case "delete":
-      return await handleDelete(admin, body, caller);
+      return await handleDelete(admin, body, caller, callerIsGlobalAdmin, callerEmpresaId);
     default:
       return json({ error: "Ação inválida." }, 400);
   }
@@ -110,28 +130,43 @@ async function validarEmpresa(admin: ReturnType<typeof createClient>, empresaId:
   return Boolean(empresa && empresa.ativo);
 }
 
-async function handleCreate(admin: ReturnType<typeof createClient>, body: Record<string, unknown>) {
+async function handleCreate(
+  admin: ReturnType<typeof createClient>,
+  body: Record<string, unknown>,
+  canCreateAcrossEmpresas: boolean,
+  callerEmpresaId: string | null,
+) {
   const nome = String(body.nome || "").trim();
   const login = sanitizeLogin(String(body.login || ""));
   const senha = String(body.senha || "");
   const role = body.role === "admin" ? "admin" : body.role === "caixa" ? "caixa" : null;
-  const empresaIdRaw = body.empresa_id ? String(body.empresa_id) : null;
 
   if (!nome) return json({ error: "Informe o nome." }, 400);
   if (!login) return json({ error: "Informe um usuário (login) válido." }, 400);
   if (senha.length < 6) return json({ error: "A senha deve ter ao menos 6 caracteres." }, 400);
   if (!role) return json({ error: "Papel inválido." }, 400);
 
-  if (role !== "admin" && !empresaIdRaw) {
-    return json({ error: "Selecione uma empresa para este usuário." }, 400);
-  }
-
-  let empresaId: string | null = null;
-  if (empresaIdRaw) {
-    if (!(await validarEmpresa(admin, empresaIdRaw))) {
-      return json({ error: "Selecione uma empresa válida." }, 400);
+  // Admin de empresa só cria usuários dentro da própria empresa — o
+  // empresa_id enviado pelo cliente é ignorado nesse caso (mesma trava que
+  // a policy de RLS aplica em usuarios_update_admin). Isso também impede um
+  // admin de empresa de criar um novo admin GLOBAL diretamente (role
+  // "admin" + empresa_id nulo), que era a segunda via para o mesmo
+  // escalonamento de privilégio.
+  let empresaId: string | null;
+  if (!canCreateAcrossEmpresas) {
+    empresaId = callerEmpresaId;
+  } else {
+    const empresaIdRaw = body.empresa_id ? String(body.empresa_id) : null;
+    if (role !== "admin" && !empresaIdRaw) {
+      return json({ error: "Selecione uma empresa para este usuário." }, 400);
     }
-    empresaId = empresaIdRaw;
+    empresaId = null;
+    if (empresaIdRaw) {
+      if (!(await validarEmpresa(admin, empresaIdRaw))) {
+        return json({ error: "Selecione uma empresa válida." }, 400);
+      }
+      empresaId = empresaIdRaw;
+    }
   }
 
   const email = `${login}@appvendas.local`;
@@ -169,6 +204,8 @@ async function handleUpdate(
   admin: ReturnType<typeof createClient>,
   body: Record<string, unknown>,
   caller: { id: string } | null,
+  callerIsGlobalAdmin: boolean,
+  callerEmpresaId: string | null,
 ) {
   const id = String(body.id || "");
   if (!id) return json({ error: "Usuário inválido." }, 400);
@@ -181,27 +218,43 @@ async function handleUpdate(
   if (currentError) return json({ error: currentError.message }, 400);
   if (!currentRow) return json({ error: "Usuário não encontrado." }, 400);
 
+  // Admin de empresa só gerencia usuários da própria empresa — mesma trava
+  // da policy usuarios_update_admin (migration 0020).
+  if (!callerIsGlobalAdmin && currentRow.empresa_id !== callerEmpresaId) {
+    return json({ error: "Você só pode gerenciar usuários da sua própria empresa." }, 403);
+  }
+
   const patch: Record<string, unknown> = {};
   if (typeof body.nome === "string" && body.nome.trim()) patch.nome = body.nome.trim();
   if (body.role === "admin" || body.role === "caixa") patch.role = body.role;
   if (typeof body.ativo === "boolean") patch.ativo = body.ativo;
 
   const effectiveRole = (patch.role as string) || currentRow.role;
-  const empresaProvided = Object.prototype.hasOwnProperty.call(body, "empresa_id");
-  const empresaIdRaw = empresaProvided && body.empresa_id ? String(body.empresa_id) : null;
-  const effectiveEmpresaId = empresaProvided ? empresaIdRaw : currentRow.empresa_id;
+
+  let effectiveEmpresaId: string | null;
+  if (!callerIsGlobalAdmin) {
+    // Admin de empresa nunca move um usuário para fora da própria empresa
+    // nem o transforma em admin global — o empresa_id enviado pelo cliente
+    // é ignorado, travado na empresa de quem está chamando.
+    effectiveEmpresaId = callerEmpresaId;
+    patch.empresa_id = callerEmpresaId;
+  } else {
+    const empresaProvided = Object.prototype.hasOwnProperty.call(body, "empresa_id");
+    const empresaIdRaw = empresaProvided && body.empresa_id ? String(body.empresa_id) : null;
+    effectiveEmpresaId = empresaProvided ? empresaIdRaw : currentRow.empresa_id;
+
+    if (empresaProvided) {
+      if (empresaIdRaw) {
+        if (!(await validarEmpresa(admin, empresaIdRaw))) {
+          return json({ error: "Selecione uma empresa válida." }, 400);
+        }
+      }
+      patch.empresa_id = empresaIdRaw;
+    }
+  }
 
   if (effectiveRole !== "admin" && !effectiveEmpresaId) {
     return json({ error: "Selecione uma empresa para este usuário." }, 400);
-  }
-
-  if (empresaProvided) {
-    if (empresaIdRaw) {
-      if (!(await validarEmpresa(admin, empresaIdRaw))) {
-        return json({ error: "Selecione uma empresa válida." }, 400);
-      }
-    }
-    patch.empresa_id = empresaIdRaw;
   }
 
   if (caller && caller.id === id) {
@@ -220,11 +273,33 @@ async function handleUpdate(
   return json({ usuario: data });
 }
 
-async function handleResetPassword(admin: ReturnType<typeof createClient>, body: Record<string, unknown>) {
+async function checkMesmaEmpresa(
+  admin: ReturnType<typeof createClient>,
+  id: string,
+  callerIsGlobalAdmin: boolean,
+  callerEmpresaId: string | null,
+) {
+  if (callerIsGlobalAdmin) return null;
+  const { data: targetRow } = await admin.from("usuarios").select("empresa_id").eq("id", id).maybeSingle();
+  if (!targetRow || targetRow.empresa_id !== callerEmpresaId) {
+    return json({ error: "Você só pode gerenciar usuários da sua própria empresa." }, 403);
+  }
+  return null;
+}
+
+async function handleResetPassword(
+  admin: ReturnType<typeof createClient>,
+  body: Record<string, unknown>,
+  callerIsGlobalAdmin: boolean,
+  callerEmpresaId: string | null,
+) {
   const id = String(body.id || "");
   const senha = String(body.senha || "");
   if (!id) return json({ error: "Usuário inválido." }, 400);
   if (senha.length < 6) return json({ error: "A senha deve ter ao menos 6 caracteres." }, 400);
+
+  const forbidden = await checkMesmaEmpresa(admin, id, callerIsGlobalAdmin, callerEmpresaId);
+  if (forbidden) return forbidden;
 
   const { error } = await admin.auth.admin.updateUserById(id, { password: senha });
   if (error) return json({ error: error.message }, 400);
@@ -235,10 +310,15 @@ async function handleDelete(
   admin: ReturnType<typeof createClient>,
   body: Record<string, unknown>,
   caller: { id: string } | null,
+  callerIsGlobalAdmin: boolean,
+  callerEmpresaId: string | null,
 ) {
   const id = String(body.id || "");
   if (!id) return json({ error: "Usuário inválido." }, 400);
   if (caller && caller.id === id) return json({ error: "Não é possível excluir o próprio usuário." }, 400);
+
+  const forbidden = await checkMesmaEmpresa(admin, id, callerIsGlobalAdmin, callerEmpresaId);
+  if (forbidden) return forbidden;
 
   const { error } = await admin.auth.admin.deleteUser(id);
   if (error) return json({ error: error.message }, 400);

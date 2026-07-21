@@ -5,20 +5,33 @@
 
 import { supabase } from "./supabaseClient.js";
 import { isAdmin } from "./auth.js";
-import { formatCurrency } from "./app.js";
+import { formatCurrency, showToast, friendlyPgError } from "./app.js";
+
+// Estas listas alimentam os combos de busca de 5 telas (Vendas, Agenda,
+// Financeiro, Contas a Pagar, Matrículas) — antes uma falha de rede ou de
+// RLS aqui fazia o combo aparecer vazio sem nenhum aviso, como se
+// simplesmente não houvesse cadastro. Agora qualquer erro vira um toast, e
+// a tela continua funcionando com a lista vazia (comportamento anterior),
+// só que o operador sabe que algo deu errado em vez de estranhar o combo
+// vazio.
+function avisarErro(error) {
+  if (error) showToast(friendlyPgError(error), "error");
+}
 
 export async function loadClientesAtivos() {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("clientes")
     .select("id, nome, documento")
     .eq("ativo", true)
     .eq("status_cadastro", "aprovado")
     .order("nome", { ascending: true });
+  avisarErro(error);
   return data || [];
 }
 
 export async function loadProdutosAtivos(columns = "id, nome, sku, preco, estoque, tipo") {
-  const { data } = await supabase.from("produtos").select(columns).eq("ativo", true).order("nome", { ascending: true });
+  const { data, error } = await supabase.from("produtos").select(columns).eq("ativo", true).order("nome", { ascending: true });
+  avisarErro(error);
   return data || [];
 }
 
@@ -40,7 +53,8 @@ export async function loadProdutosServicos(columns) {
 // precisa da lista, já está implicitamente restrito à sua empresa.
 export async function loadEmpresasAtivas() {
   if (!isAdmin()) return [];
-  const { data } = await supabase.from("empresas").select("id, nome_fantasia, codigo").eq("ativo", true).order("nome_fantasia", { ascending: true });
+  const { data, error } = await supabase.from("empresas").select("id, nome_fantasia, codigo").eq("ativo", true).order("nome_fantasia", { ascending: true });
+  avisarErro(error);
   return data || [];
 }
 
@@ -50,12 +64,13 @@ export async function loadEmpresasAtivas() {
 // sozinho, do jeito que loadEmpresasAtivas faz.
 export async function loadFornecedoresPorEmpresa(empresaId) {
   if (!empresaId) return [];
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("fornecedores")
     .select("id, nome")
     .eq("empresa_id", empresaId)
     .eq("ativo", true)
     .order("nome", { ascending: true });
+  avisarErro(error);
   return data || [];
 }
 

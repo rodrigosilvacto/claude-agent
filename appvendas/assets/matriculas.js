@@ -443,13 +443,15 @@ async function showDetail(matriculaId, onChange) {
   const body = openModal("Detalhes da matrícula");
   body.innerHTML = `<div class="empty-state">Carregando…</div>`;
 
-  const [{ data: matricula }, { data: parcelasData }] = await Promise.all([
+  const [{ data: matricula, error: matriculaError }, { data: parcelasData }] = await Promise.all([
     supabase.from("matriculas").select("*, cliente:clientes(nome), produto:produtos(nome)").eq("id", matriculaId).single(),
     supabase.from("matricula_parcelas").select("*").eq("matricula_id", matriculaId).order("numero_parcela", { ascending: true }),
   ]);
 
   if (!matricula) {
-    body.innerHTML = `<div class="empty-state">Matrícula não encontrada.</div>`;
+    body.innerHTML = matriculaError
+      ? `<div class="empty-state"><p class="empty-state__title">Não foi possível carregar a matrícula</p><p class="empty-state__hint">${escapeHtml(friendlyPgError(matriculaError))}</p></div>`
+      : `<div class="empty-state">Matrícula não encontrada.</div>`;
     return;
   }
 
@@ -504,11 +506,12 @@ async function showDetail(matriculaId, onChange) {
     body.querySelectorAll("[data-pagar]").forEach((btn) => {
       btn.addEventListener("click", () => {
         openPagamentoParcelaForm(btn.dataset.pagar, async () => {
-          const { data: novasParcelas } = await supabase
+          const { data: novasParcelas, error } = await supabase
             .from("matricula_parcelas")
             .select("*")
             .eq("matricula_id", matriculaId)
             .order("numero_parcela", { ascending: true });
+          if (error) showToast(friendlyPgError(error), "error");
           parcelas.length = 0;
           parcelas.push(...(novasParcelas || []));
           renderBody();
