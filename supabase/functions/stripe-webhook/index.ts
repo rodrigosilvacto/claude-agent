@@ -2,8 +2,11 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.5";
 import Stripe from "https://esm.sh/stripe@17.4.0?target=deno";
 
 // AppVendas — recebe eventos do Stripe sobre as Checkout Sessions criadas
-// por create-stripe-checkout e confirma (ou cancela) a venda pendente
-// correspondente. Ver migration 0013 e supabase/functions/create-stripe-checkout.
+// por create-stripe-checkout e confirma (ou cancela) a venda ou a matrícula
+// pendente correspondente — `session.metadata.tipo` (setado no create-
+// stripe-checkout) decide qual RPC chamar; sessões antigas sem esse campo
+// são tratadas como "venda" por compatibilidade. Ver migration 0013/0015 e
+// supabase/functions/create-stripe-checkout.
 //
 // Endpoint público (deploy com --no-verify-jwt, quem chama é o Stripe, não
 // um cliente Supabase autenticado) — a segurança é a verificação de
@@ -60,27 +63,45 @@ Deno.serve(async (req: Request) => {
   });
 
   async function confirmar(session: Stripe.Checkout.Session) {
-    const vendaId = session.client_reference_id;
-    if (!vendaId) {
+    const referenceId = session.client_reference_id;
+    if (!referenceId) {
       console.error("checkout.session sem client_reference_id:", session.id);
       return;
     }
     const paymentIntentId = typeof session.payment_intent === "string"
       ? session.payment_intent
       : session.payment_intent?.id ?? null;
+
+    if (session.metadata?.tipo === "matricula") {
+      const { error } = await supabase.rpc("confirmar_pagamento_stripe_matricula", {
+        p_matricula_id: referenceId,
+        p_stripe_checkout_session_id: session.id,
+        p_stripe_payment_intent_id: paymentIntentId,
+      });
+      if (error) console.error("Falha ao confirmar pagamento da matrícula", referenceId, error);
+      return;
+    }
+
     const { error } = await supabase.rpc("confirmar_pagamento_stripe", {
-      p_venda_id: vendaId,
+      p_venda_id: referenceId,
       p_stripe_checkout_session_id: session.id,
       p_stripe_payment_intent_id: paymentIntentId,
     });
-    if (error) console.error("Falha ao confirmar pagamento da venda", vendaId, error);
+    if (error) console.error("Falha ao confirmar pagamento da venda", referenceId, error);
   }
 
   async function marcarFalhou(session: Stripe.Checkout.Session) {
-    const vendaId = session.client_reference_id;
-    if (!vendaId) return;
-    const { error } = await supabase.rpc("marcar_stripe_pagamento_falhou", { p_venda_id: vendaId });
-    if (error) console.error("Falha ao marcar pagamento como não concluído para a venda", vendaId, error);
+    const referenceId = session.client_reference_id;
+    if (!referenceId) return;
+
+    if (session.metadata?.tipo === "matricula") {
+      const { error } = await supabase.rpc("marcar_stripe_pagamento_falhou_matricula", { p_matricula_id: referenceId });
+      if (error) console.error("Falha ao marcar pagamento como não concluído para a matrícula", referenceId, error);
+      return;
+    }
+
+    const { error } = await supabase.rpc("marcar_stripe_pagamento_falhou", { p_venda_id: referenceId });
+    if (error) console.error("Falha ao marcar pagamento como não concluído para a venda", referenceId, error);
   }
 
   switch (event.type) {

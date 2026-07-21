@@ -14,6 +14,7 @@ const MENU_ITEMS = [
   { key: "vendas", label: "Loja" },
   { key: "agenda", label: "Agenda" },
   { key: "estoques", label: "Estoques" },
+  { key: "matriculas", label: "Matrículas" },
   { key: "contas-receber", label: "Contas a Receber" },
   { key: "contas-pagar", label: "Contas a Pagar" },
   { key: "relatorios", label: "Visão geral (Relatórios)" },

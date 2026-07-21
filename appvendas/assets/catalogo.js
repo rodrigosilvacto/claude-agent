@@ -68,3 +68,7 @@ export function produtoSearchOptions(produtos, { meta } = {}) {
 }
 
 export const produtoMetaPrecoEstoque = (p) => `${formatCurrency(p.preco)} · estoque ${p.estoque}`;
+
+// Matrículas vendem serviço (mensalidade), não produto físico — mostrar
+// "estoque" ali confundiria o operador, por isso um meta só com o preço.
+export const produtoMetaPreco = (p) => formatCurrency(p.preco);

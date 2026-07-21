@@ -1,17 +1,25 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.110.5";
 import Stripe from "https://esm.sh/stripe@17.4.0?target=deno";
 
-// AppVendas — cria uma Stripe Checkout Session para uma venda com forma de
-// pagamento "Stripe". Fluxo "link/QR": o cliente paga pelo próprio celular
-// (o app nunca vê dados de cartão), então a venda nasce como
-// 'aguardando_pagamento' (criar_venda com p_status) e só vira 'confirmada'
-// quando o webhook stripe-webhook recebe a confirmação do Stripe — ver
-// migration 0013.
+// AppVendas — cria uma Stripe Checkout Session para uma venda OU para a 1ª
+// parcela de uma matrícula com forma de pagamento "Stripe" (`p_tipo`, ver
+// abaixo — "venda" é o padrão, mantém compatibilidade com chamadas antigas
+// sem o campo). Fluxo "link/QR": o cliente paga pelo próprio celular (o app
+// nunca vê dados de cartão), então o registro nasce como
+// 'aguardando_pagamento' e só vira 'confirmada'/'ativa' quando o webhook
+// stripe-webhook recebe a confirmação do Stripe — ver migration 0013
+// (vendas) e 0015 (matriculas).
+//
+// Matrícula parcelada + Stripe: uma Checkout Session é cobrança única, não
+// assinatura recorrente — por isso só a 1ª parcela é cobrada aqui; as
+// demais nascem como títulos a receber com vencimento futuro (ver
+// criar_matricula) e são recebidas manualmente depois.
 //
 // Chamado autenticado (verify_jwt ligado no deploy): o cliente Supabase
 // abaixo é criado com o JWT de quem chamou, então is_admin()/
-// current_empresa_id() dentro de criar_venda funcionam exatamente como na
-// chamada direta da RPC (mesma checagem de empresa/permissão).
+// current_empresa_id() dentro de criar_venda/criar_matricula funcionam
+// exatamente como na chamada direta da RPC (mesma checagem de
+// empresa/permissão).
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY")!;
@@ -63,6 +71,20 @@ Deno.serve(async (req: Request) => {
     global: { headers: { Authorization: authHeader } },
   });
 
+  const tipo = body.p_tipo === "matricula" ? "matricula" : "venda";
+
+  if (tipo === "matricula") {
+    return await criarCheckoutMatricula(supabaseAsUser, body, successUrl, cancelUrl);
+  }
+  return await criarCheckoutVenda(supabaseAsUser, body, successUrl, cancelUrl);
+});
+
+async function criarCheckoutVenda(
+  supabaseAsUser: ReturnType<typeof createClient>,
+  body: Record<string, unknown>,
+  successUrl: string,
+  cancelUrl: string,
+) {
   const { data: vendaId, error: criarError } = await supabaseAsUser.rpc("criar_venda", {
     p_cliente_id: body.p_cliente_id ?? null,
     p_data_venda: body.p_data_venda ?? null,
@@ -94,7 +116,7 @@ Deno.serve(async (req: Request) => {
       mode: "payment",
       payment_method_types: ["card"],
       client_reference_id: vendaId,
-      metadata: { venda_id: vendaId },
+      metadata: { tipo: "venda", venda_id: vendaId },
       line_items: [
         {
           price_data: {
@@ -119,4 +141,75 @@ Deno.serve(async (req: Request) => {
     await supabaseAsUser.rpc("cancelar_venda", { p_venda_id: vendaId });
     return json({ error: "Não foi possível iniciar o pagamento no Stripe." }, 502);
   }
-});
+}
+
+// Matrícula: a Checkout Session cobra só a 1ª parcela (criar_matricula já
+// deixa todas as parcelas como 'pendente' quando p_status é
+// 'aguardando_pagamento' — a parcela 1 só vira 'pago' na confirmação do
+// webhook, ver confirmar_pagamento_stripe_matricula).
+async function criarCheckoutMatricula(
+  supabaseAsUser: ReturnType<typeof createClient>,
+  body: Record<string, unknown>,
+  successUrl: string,
+  cancelUrl: string,
+) {
+  const { data: matriculaId, error: criarError } = await supabaseAsUser.rpc("criar_matricula", {
+    p_cliente_id: body.p_cliente_id ?? null,
+    p_produto_id: body.p_produto_id ?? null,
+    p_meses: body.p_meses ?? null,
+    p_numero_parcelas: body.p_numero_parcelas ?? null,
+    p_forma_pagamento: "Stripe",
+    p_data_matricula: body.p_data_matricula ?? null,
+    p_desconto: body.p_desconto ?? 0,
+    p_observacoes: body.p_observacoes ?? null,
+    p_empresa_id: body.p_empresa_id ?? null,
+    p_status: "aguardando_pagamento",
+  });
+
+  if (criarError || !matriculaId) {
+    return json({ error: criarError?.message || "Não foi possível criar a matrícula." }, 400);
+  }
+
+  const { data: parcela1, error: parcelaError } = await supabaseAsUser
+    .from("matricula_parcelas")
+    .select("valor, matricula:matriculas(numero, numero_parcelas)")
+    .eq("matricula_id", matriculaId)
+    .eq("numero_parcela", 1)
+    .single();
+
+  if (parcelaError || !parcela1) {
+    await supabaseAsUser.rpc("cancelar_matricula", { p_matricula_id: matriculaId });
+    return json({ error: "Matrícula criada, mas não foi possível ler a 1ª parcela." }, 500);
+  }
+
+  const numero = parcela1.matricula?.numero;
+  const numeroParcelas = parcela1.matricula?.numero_parcelas;
+
+  try {
+    const session = await stripe.checkout.sessions.create({
+      mode: "payment",
+      payment_method_types: ["card"],
+      client_reference_id: matriculaId,
+      metadata: { tipo: "matricula", matricula_id: matriculaId },
+      line_items: [
+        {
+          price_data: {
+            currency: "brl",
+            product_data: { name: `Matrícula #${numero} — parcela 1/${numeroParcelas}` },
+            unit_amount: Math.round(Number(parcela1.valor) * 100),
+          },
+          quantity: 1,
+        },
+      ],
+      expires_at: Math.floor(Date.now() / 1000) + CHECKOUT_EXPIRES_IN_SECONDS,
+      success_url: `${successUrl}${successUrl.includes("?") ? "&" : "?"}matricula=${matriculaId}`,
+      cancel_url: `${cancelUrl}${cancelUrl.includes("?") ? "&" : "?"}matricula=${matriculaId}`,
+    });
+
+    return json({ url: session.url, matricula_id: matriculaId, numero });
+  } catch (err) {
+    console.error("Falha ao criar Stripe Checkout Session:", err);
+    await supabaseAsUser.rpc("cancelar_matricula", { p_matricula_id: matriculaId });
+    return json({ error: "Não foi possível iniciar o pagamento no Stripe." }, 502);
+  }
+}

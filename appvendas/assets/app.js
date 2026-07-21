@@ -14,7 +14,7 @@ const DEFAULT_APP_MARK = "BC";
 // Chaves em ROUTES que representam itens de menu operacionais que podem ser
 // escondidos por empresa (configurável em Administração > Configurações).
 // Início e o grupo Administração nunca entram nessa lista.
-const CONFIGURABLE_MENU_KEYS = ["clientes", "produtos", "fornecedores", "vendas", "agenda", "estoques", "contas-receber", "contas-pagar", "relatorios"];
+const CONFIGURABLE_MENU_KEYS = ["clientes", "produtos", "fornecedores", "vendas", "agenda", "estoques", "matriculas", "contas-receber", "contas-pagar", "relatorios"];
 
 // Atualize este timestamp a cada mudança em app.js — é como a sidebar mostra
 // se o navegador está com uma cópia antiga em cache (ver #sidebar-build
@@ -24,7 +24,7 @@ const CONFIGURABLE_MENU_KEYS = ["clientes", "produtos", "fornecedores", "vendas"
 // ES modules carregar duas instâncias do módulo (hashchange listener e
 // boot() duplicados). Ver commit e4f8448 (correção original) e 3659424/
 // e75bd3a (reintrodução e reversão do bug).
-export const APP_BUILD = "2026-07-21 01:20 -03";
+export const APP_BUILD = "2026-07-21 15:40 -03";
 
 const ROUTES = {
   home: {
@@ -61,6 +61,11 @@ const ROUTES = {
     breadcrumb: "Movimentações",
     title: "Estoques",
     load: () => import("./estoques.js"),
+  },
+  matriculas: {
+    breadcrumb: "Movimentações",
+    title: "Matrículas",
+    load: () => import("./matriculas.js"),
   },
   "contas-receber": {
     breadcrumb: "Financeiro",
