@@ -1,7 +1,13 @@
+import QRCode from "https://esm.sh/qrcode@1.5.4";
 import { supabase } from "./supabaseClient.js";
-import { showToast, openModal, confirmDialog, formatCurrency, formatDate, formatDateTime, escapeHtml, createSearchSelect, registerAutoRefresh, consumeVendaPrefill, withButtonLock, friendlyPgError } from "./app.js";
+import { showToast, openModal, closeModal, confirmDialog, formatCurrency, formatDate, formatDateTime, escapeHtml, createSearchSelect, registerAutoRefresh, consumeVendaPrefill, withButtonLock, friendlyPgError } from "./app.js";
 import { isAdmin } from "./auth.js";
 import { loadClientesAtivos, loadProdutosAtivos, loadEmpresasAtivas, clienteSearchOptions, produtoSearchOptions, empresaSearchOptions, produtoMetaPrecoEstoque } from "./catalogo.js";
+
+// Intervalo do polling que checa se o pagamento Stripe já foi confirmado
+// pelo webhook (ver mostrarModalStripe) — 3s é responsivo o bastante pro
+// cliente ver a tela do caixa reagir sem gerar tráfego excessivo.
+const STRIPE_POLL_INTERVAL_MS = 3000;
 
 // Cada forma de pagamento vira um "tile" com ícone no fechamento da venda —
 // em vez de uma fileira de pílulas de texto (que não cabiam lado a lado e
@@ -27,6 +33,13 @@ const FORMAS_PAGAMENTO = [
   {
     label: "Boleto",
     icon: '<svg aria-hidden="true" focusable="false" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="butt"><path d="M3 4v16" stroke-width="1.5"/><path d="M6.5 4v16" stroke-width="3"/><path d="M11 4v16" stroke-width="1.5"/><path d="M14 4v16" stroke-width="1.5"/><path d="M17.5 4v16" stroke-width="3"/><path d="M21.5 4v16" stroke-width="1.5"/></svg>',
+  },
+  {
+    // Pagamento remoto: diferente das outras formas (rótulos só — o dinheiro
+    // já mudou de mão fisicamente), Stripe gera um QR/link que o cliente
+    // paga pelo próprio celular; a venda só fecha quando o webhook confirma.
+    label: "Stripe",
+    icon: '<svg aria-hidden="true" focusable="false" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/><path d="M10 6h4"/></svg>',
   },
 ];
 
@@ -296,32 +309,64 @@ function renderNovaVenda(content) {
     const payload = {
       p_cliente_id: clienteSelect.getValue() || null,
       p_data_venda: content.querySelector("#v-data").value || null,
-      p_forma_pagamento: formaPagamento,
       p_observacoes: content.querySelector("#v-obs").value || null,
       p_desconto: Number(descontoInput.value || 0),
       p_itens: cart.map((item) => ({ produto_id: item.produto_id, quantidade: item.quantidade, preco_unitario: item.preco_unitario })),
     };
     if (admin) payload.p_empresa_id = empresaSelect.getValue();
 
-    const { error } = await supabase.rpc("criar_venda", payload);
+    if (formaPagamento === "Stripe") {
+      await iniciarPagamentoStripe(payload, errorEl);
+      return;
+    }
+
+    const { error } = await supabase.rpc("criar_venda", { ...payload, p_forma_pagamento: formaPagamento });
 
     if (error) {
       errorEl.innerHTML = `<div class="form-error">${escapeHtml(friendlyPgError(error))}</div>`;
       return;
     }
 
+    await finalizarComSucesso();
+  }));
+
+  // Fluxo Stripe: a venda só é criada (e só fecha) depois do pagamento —
+  // ver iniciarPagamentoStripe/mostrarModalStripe abaixo. `agendamentoOrigemId`
+  // e `cart` seguem em memória durante todo o processo, por isso
+  // finalizarComSucesso lê essas variáveis do escopo de renderNovaVenda.
+  async function finalizarComSucesso(mensagemBase = "Venda registrada com sucesso.") {
     if (agendamentoOrigemId) {
       const { error: agError } = await supabase.from("agendamentos").update({ status: "atendido" }).eq("id", agendamentoOrigemId);
       showToast(agError ? "Venda registrada, mas não foi possível confirmar o atendimento na agenda." : "Venda registrada e atendimento confirmado.", agError ? "error" : "success");
     } else {
-      showToast("Venda registrada com sucesso.");
+      showToast(mensagemBase);
     }
 
     agendamentoOrigemId = null;
     cart = [];
     produtosOptions = await loadProdutosAtivos();
     renderNovaVenda(content);
-  }));
+  }
+
+  async function iniciarPagamentoStripe(payload, errorEl) {
+    // Base do próprio index.html do appvendas (funciona local ou em qualquer
+    // domínio de deploy) — as páginas de retorno vivem ao lado dele.
+    const baseUrl = new URL(".", window.location.href).href;
+
+    let data;
+    try {
+      data = await chamarCriarCheckoutStripe({
+        ...payload,
+        success_url: `${baseUrl}pagamento-confirmado.html`,
+        cancel_url: `${baseUrl}pagamento-cancelado.html`,
+      });
+    } catch (err) {
+      errorEl.innerHTML = `<div class="form-error">${escapeHtml(err.message)}</div>`;
+      return;
+    }
+
+    await mostrarModalStripe(data.venda_id, data.url, data.numero, finalizarComSucesso);
+  }
 
   renderCart();
 
@@ -334,6 +379,81 @@ function renderNovaVenda(content) {
     clienteSelect.setOptions(clienteSearchOptions(clientesOptions));
     produtoSelect.setOptions(produtoSearchOptions(produtosOptions, { meta: produtoMetaPrecoEstoque }));
   }, 15000);
+}
+
+// Mesmo padrão de erro de callManageUsuarios (auth.js): a edge function
+// devolve `{ error }` em JSON tanto em falhas de validação (400/502) quanto
+// o supabase-js embrulha isso como FunctionsHttpError — o corpo de verdade
+// só é acessível via error.context.
+async function chamarCriarCheckoutStripe(payload) {
+  const { data, error } = await supabase.functions.invoke("create-stripe-checkout", { body: payload });
+
+  if (error) {
+    let message = error.message;
+    try {
+      const body = await error.context.json();
+      if (body?.error) message = body.error;
+    } catch {
+      // resposta não era JSON — mantém a mensagem original do erro de rede
+    }
+    throw new Error(message);
+  }
+
+  if (data?.error) throw new Error(data.error);
+  return data;
+}
+
+// Mostra o QR/link da Checkout Session e faz polling do status da venda até
+// o webhook do Stripe confirmar (ou o operador fechar o modal — nesse caso
+// a venda segue 'aguardando_pagamento' e expira sozinha em 30min, ver
+// create-stripe-checkout). `onConfirmada` é finalizarComSucesso, injetada
+// pelo caller para não precisar exportar o estado do carrinho pra fora de
+// renderNovaVenda.
+async function mostrarModalStripe(vendaId, checkoutUrl, numero, onConfirmada) {
+  let stopped = false;
+  const body = openModal(`Pagamento via Stripe — Venda #${numero}`, {
+    onClose: () => { stopped = true; },
+  });
+
+  body.innerHTML = `
+    <div style="text-align:center;">
+      <p class="field-hint" style="margin-top:0;">Peça para o cliente escanear o QR code com a câmera do celular, ou envie o link de pagamento.</p>
+      <img id="stripe-qr" alt="QR code de pagamento" width="220" height="220" style="margin: 1rem auto; display:block; border-radius: 8px;" />
+      <a class="btn btn--ghost" href="${escapeHtml(checkoutUrl)}" target="_blank" rel="noopener">Abrir link de pagamento</a>
+      <p class="cell-muted" id="stripe-status" style="margin-top: 1rem;">Aguardando pagamento…</p>
+    </div>
+  `;
+
+  try {
+    const dataUrl = await QRCode.toDataURL(checkoutUrl, { width: 220, margin: 1 });
+    const img = body.querySelector("#stripe-qr");
+    if (img) img.src = dataUrl;
+  } catch (err) {
+    console.error("Falha ao gerar QR code do pagamento:", err);
+    const img = body.querySelector("#stripe-qr");
+    if (img) img.hidden = true;
+  }
+
+  while (!stopped) {
+    await new Promise((resolve) => setTimeout(resolve, STRIPE_POLL_INTERVAL_MS));
+    if (stopped) break;
+
+    const { data: venda } = await supabase.from("vendas").select("status").eq("id", vendaId).maybeSingle();
+    if (!venda) continue;
+
+    if (venda.status === "confirmada") {
+      stopped = true;
+      closeModal();
+      await onConfirmada("Pagamento confirmado. Venda registrada.");
+      return;
+    }
+    if (venda.status === "cancelada") {
+      stopped = true;
+      const statusEl = body.querySelector("#stripe-status");
+      if (statusEl) statusEl.innerHTML = '<span class="form-error">Pagamento não concluído (QR expirado ou cancelado).</span>';
+      return;
+    }
+  }
 }
 
 const HISTORICO_PAGE_SIZE = 50;
@@ -448,7 +568,12 @@ function renderHistoricoPagination(content, state, count) {
 }
 
 function statusLabel(status) {
-  return { confirmada: "Confirmada", orcamento: "Orçamento", cancelada: "Cancelada" }[status] || status;
+  return {
+    confirmada: "Confirmada",
+    orcamento: "Orçamento",
+    cancelada: "Cancelada",
+    aguardando_pagamento: "Aguardando pagamento",
+  }[status] || status;
 }
 
 async function showDetail(vendaId) {

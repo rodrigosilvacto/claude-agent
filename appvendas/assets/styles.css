@@ -974,6 +974,7 @@ svg {
 .status--confirmada { color: var(--success); background: var(--success-soft); }
 .status--orcamento { color: var(--warning); background: var(--warning-soft); }
 .status--cancelada { color: var(--danger); background: var(--danger-soft); }
+.status--aguardando_pagamento { color: var(--warning); background: var(--warning-soft); }
 .status--ativo { color: var(--success); background: var(--success-soft); }
 .status--inativo { color: var(--text-muted); background: var(--line); }
 .status--admin { color: var(--amber-deep); background: var(--amber-soft); }
