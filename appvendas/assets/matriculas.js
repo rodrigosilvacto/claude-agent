@@ -85,7 +85,7 @@ function renderNovaMatricula(content) {
 
         <div class="form-grid" style="grid-template-columns: 1fr 1fr;">
           <div class="field">
-            <label for="m-meses">Duração do curso (meses)<span class="field-required">*</span></label>
+            <label for="m-meses">Duração do curso (meses) <span class="field-optional">informativo</span></label>
             <input class="input" type="number" id="m-meses" min="1" step="1" value="1" />
           </div>
           <div class="field">
@@ -93,7 +93,7 @@ function renderNovaMatricula(content) {
             <input class="input" type="number" id="m-parcelas" min="1" step="1" value="1" />
           </div>
         </div>
-        <p class="field-hint" style="margin-top: -0.6rem;">A 1ª parcela é paga agora, na forma de pagamento escolhida ao lado. As demais viram títulos a receber com vencimento mensal, cobrados no balcão conforme o aluno for pagando.</p>
+        <p class="field-hint" style="margin-top: -0.6rem;">A duração não afeta o valor cobrado — é só um registro de quanto tempo dura o curso. Quem define o valor é o preço do curso/serviço escolhido acima, dividido entre as parcelas. A 1ª parcela é paga agora, na forma de pagamento escolhida ao lado; as demais viram títulos a receber com vencimento mensal, cobrados no balcão conforme o aluno for pagando.</p>
 
         <button type="button" class="venda-obs-toggle" id="m-obs-toggle">+ Adicionar observação</button>
         <div class="field venda-obs" id="m-obs-field" hidden>
@@ -111,9 +111,7 @@ function renderNovaMatricula(content) {
         </div>
 
         <div class="receipt__tear"></div>
-        <div class="receipt__row"><span>Mensalidade</span><span id="r-mensalidade">${formatCurrency(0)}</span></div>
-        <div class="receipt__row"><span>Meses</span><span id="r-meses">1</span></div>
-        <div class="receipt__row"><span>Subtotal</span><span id="r-subtotal">${formatCurrency(0)}</span></div>
+        <div class="receipt__row"><span>Valor do curso/serviço</span><span id="r-mensalidade">${formatCurrency(0)}</span></div>
         <div class="receipt__row">
           <span>Desconto</span>
           <input class="input" type="number" id="m-desconto" min="0" step="0.01" value="0" style="width: 110px; text-align:right; font-family: var(--font-mono);" />
@@ -165,19 +163,18 @@ function renderNovaMatricula(content) {
     onChange: () => updateTotals(),
   });
 
+  // Duração (meses) é só um campo informativo — não entra nesta conta.
+  // Quem define o valor é o preço do produto (curso/serviço), ver
+  // criar_matricula.
   function updateTotals() {
     const produto = produtosOptions.find((p) => p.id === produtoSelect.getValue());
-    const mensalidade = produto ? Number(produto.preco || 0) : 0;
-    const meses = Math.max(Number(mesesInput.value || 0), 0);
+    const valorServico = produto ? Number(produto.preco || 0) : 0;
     const parcelas = Math.max(Number(parcelasInput.value || 0), 1);
     const desconto = Number(descontoInput.value || 0);
-    const subtotal = mensalidade * meses;
-    const total = Math.max(subtotal - desconto, 0);
+    const total = Math.max(valorServico - desconto, 0);
     const valorParcela = total / parcelas;
 
-    content.querySelector("#r-mensalidade").textContent = formatCurrency(mensalidade);
-    content.querySelector("#r-meses").textContent = String(meses || 0);
-    content.querySelector("#r-subtotal").textContent = formatCurrency(subtotal);
+    content.querySelector("#r-mensalidade").textContent = formatCurrency(valorServico);
     content.querySelector("#r-total").textContent = formatCurrency(total);
     // Cálculo em tela é aproximado (só pra guiar o operador) — o servidor
     // recalcula com arredondamento exato e ajusta a última parcela, ver
@@ -185,7 +182,6 @@ function renderNovaMatricula(content) {
     content.querySelector("#r-parcelas-info").textContent = `${parcelas}x de ${formatCurrency(valorParcela)} (aprox.)`;
   }
 
-  mesesInput.addEventListener("input", updateTotals);
   parcelasInput.addEventListener("input", updateTotals);
   descontoInput.addEventListener("input", updateTotals);
   updateTotals();
@@ -435,11 +431,11 @@ async function showDetail(matriculaId, onChange) {
         <div class="receipt__row"><span>Data</span><span>${formatDate(matricula.data_matricula)}</span></div>
         <div class="receipt__row"><span>Cliente</span><span>${escapeHtml(matricula.cliente?.nome || "—")}</span></div>
         <div class="receipt__row"><span>Curso</span><span>${escapeHtml(matricula.produto?.nome || "—")}</span></div>
-        <div class="receipt__row"><span>Duração</span><span>${matricula.meses} ${matricula.meses === 1 ? "mês" : "meses"}</span></div>
+        <div class="receipt__row"><span>Duração <span class="cell-muted">(informativo)</span></span><span>${matricula.meses} ${matricula.meses === 1 ? "mês" : "meses"}</span></div>
         <div class="receipt__row"><span>Status</span><span class="status status--${matriculaStatusClass(matricula.status)}">${matriculaStatusLabel(matricula.status)}</span></div>
         ${matricula.observacoes ? `<div class="receipt__row"><span>Obs.</span><span>${escapeHtml(matricula.observacoes)}</span></div>` : ""}
         <div class="receipt__tear"></div>
-        <div class="receipt__row"><span>Mensalidade</span><span>${formatCurrency(matricula.valor_mensalidade)}</span></div>
+        <div class="receipt__row"><span>Valor do curso/serviço</span><span>${formatCurrency(matricula.valor_servico)}</span></div>
         <div class="receipt__row"><span>Desconto</span><span>${formatCurrency(matricula.desconto)}</span></div>
         <div class="receipt__total"><span>Total</span><span>${formatCurrency(matricula.valor_total)}</span></div>
       </div>

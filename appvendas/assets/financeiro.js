@@ -46,8 +46,9 @@ function lastDayOfMonthPlusStr(monthsAhead) {
 export async function render(view, actionsEl) {
   // "Até" olha 1 mês à frente por padrão — cobre a próxima parcela de
   // matrícula a vencer sem inflar demais a lista com vencimentos distantes;
-  // o operador pode alargar o filtro pra ver mais.
-  const state = { inicio: firstDayOfMonthStr(), fim: lastDayOfMonthPlusStr(1), page: 0, linhas: [] };
+  // o operador pode alargar o filtro pra ver mais (ou ligar "Só pendentes"
+  // pra ver todo mundo que ainda deve, de qualquer vencimento).
+  const state = { inicio: firstDayOfMonthStr(), fim: lastDayOfMonthPlusStr(1), page: 0, linhas: [], somentePendentes: false };
 
   [clientesOptions, produtosOptions, empresasOptions] = await Promise.all([loadClientesAtivos(), loadProdutosAtivos(), loadEmpresasAtivas()]);
 
@@ -70,17 +71,41 @@ export async function render(view, actionsEl) {
         <label>&nbsp;</label>
         <button type="button" class="btn btn--ghost" id="cr-filtrar">Filtrar</button>
       </div>
+      <div class="field" style="flex: 0 0 auto; margin-left: auto;">
+        <label>&nbsp;</label>
+        <label style="display:flex; align-items:center; gap:0.45rem; white-space:nowrap; font-weight:600; cursor:pointer;">
+          <input type="checkbox" id="cr-somente-pendentes" />
+          Só pendentes (todos os vencimentos)
+        </label>
+      </div>
     </div>
     <div id="cr-content"><div class="empty-state">Carregando…</div></div>
   `;
 
   const inicioInput = view.querySelector("#cr-inicio");
   const fimInput = view.querySelector("#cr-fim");
+  const filtrarBtn = view.querySelector("#cr-filtrar");
+  const somentePendentesInput = view.querySelector("#cr-somente-pendentes");
 
-  view.querySelector("#cr-filtrar").addEventListener("click", () => {
+  function syncFiltroDatasDisabled() {
+    const disabled = state.somentePendentes;
+    inicioInput.disabled = disabled;
+    fimInput.disabled = disabled;
+    filtrarBtn.disabled = disabled;
+  }
+  syncFiltroDatasDisabled();
+
+  filtrarBtn.addEventListener("click", () => {
     state.inicio = inicioInput.value || state.inicio;
     state.fim = fimInput.value || state.fim;
     state.page = 0;
+    load(view, state);
+  });
+
+  somentePendentesInput.addEventListener("change", () => {
+    state.somentePendentes = somentePendentesInput.checked;
+    state.page = 0;
+    syncFiltroDatasDisabled();
     load(view, state);
   });
 
@@ -89,10 +114,51 @@ export async function render(view, actionsEl) {
   registerAutoRefresh(() => load(view, state, { silent: true }), 20000);
 }
 
+const PARCELA_SELECT = "id, numero_parcela, valor, data_vencimento, data_pagamento, forma_pagamento, status, cliente:clientes(nome), matricula:matriculas(numero, numero_parcelas, produto:produtos(nome))";
+
+function mapParcelaLinha(p) {
+  const vencida = p.status === "pendente" && p.data_vencimento < todayStr();
+  return {
+    origem: "matricula",
+    id: p.id,
+    data: p.status === "pago" ? p.data_pagamento : p.data_vencimento,
+    cliente: p.cliente?.nome || "Sem cliente",
+    itens: `Parcela ${p.numero_parcela}/${p.matricula?.numero_parcelas ?? "?"} — ${p.matricula?.produto?.nome || "Curso"}`,
+    formaPagamento: p.forma_pagamento,
+    valor: Number(p.valor || 0),
+    status: p.status,
+    numero: p.matricula?.numero,
+    vencida,
+  };
+}
+
 async function load(view, state, opts = {}) {
   const { silent = false } = opts;
   const content = view.querySelector("#cr-content");
   if (!silent) content.innerHTML = `<div class="empty-state">Carregando…</div>`;
+
+  // "Só pendentes" ignora completamente o filtro de data e as demais origens
+  // (vendas/manual) — é uma lista à parte, "quem ainda me deve", ordenada
+  // pelo vencimento mais próximo primeiro (não pela mais recente).
+  if (state.somentePendentes) {
+    const { data, error } = await supabase
+      .from("matricula_parcelas")
+      .select(PARCELA_SELECT)
+      .eq("status", "pendente")
+      .order("data_vencimento", { ascending: true })
+      .limit(FETCH_CAP);
+
+    if (error) {
+      content.innerHTML = `<div class="empty-state"><p class="empty-state__title">Não foi possível carregar as parcelas pendentes</p><p class="empty-state__hint">${escapeHtml(friendlyPgError(error))}</p></div>`;
+      return;
+    }
+
+    state.linhas = (data || []).map(mapParcelaLinha);
+    const totalPages = Math.max(1, Math.ceil(state.linhas.length / PAGE_SIZE));
+    state.page = Math.min(state.page, totalPages - 1);
+    renderContent(view, state);
+    return;
+  }
 
   const [vendasRes, recebimentosRes, parcelasRes] = await Promise.all([
     supabase
@@ -114,7 +180,7 @@ async function load(view, state, opts = {}) {
     // vence, não em que foi lançada).
     supabase
       .from("matricula_parcelas")
-      .select("id, numero_parcela, valor, data_vencimento, data_pagamento, forma_pagamento, status, cliente:clientes(nome), matricula:matriculas(numero, numero_parcelas, produto:produtos(nome))")
+      .select(PARCELA_SELECT)
       .or(`and(status.eq.pago,data_pagamento.gte.${state.inicio},data_pagamento.lte.${state.fim}),and(status.eq.pendente,data_vencimento.gte.${state.inicio},data_vencimento.lte.${state.fim})`)
       .limit(FETCH_CAP),
   ]);
@@ -148,17 +214,7 @@ async function load(view, state, opts = {}) {
     status: r.status,
   }));
 
-  const linhasParcelas = (parcelasRes.data || []).map((p) => ({
-    origem: "matricula",
-    id: p.id,
-    data: p.status === "pago" ? p.data_pagamento : p.data_vencimento,
-    cliente: p.cliente?.nome || "Sem cliente",
-    itens: `Parcela ${p.numero_parcela}/${p.matricula?.numero_parcelas ?? "?"} — ${p.matricula?.produto?.nome || "Curso"}`,
-    formaPagamento: p.forma_pagamento,
-    valor: Number(p.valor || 0),
-    status: p.status,
-    numero: p.matricula?.numero,
-  }));
+  const linhasParcelas = (parcelasRes.data || []).map(mapParcelaLinha);
 
   state.linhas = [...linhasVendas, ...linhasManuais, ...linhasParcelas].sort((a, b) => new Date(b.data) - new Date(a.data));
   const totalPages = Math.max(1, Math.ceil(state.linhas.length / PAGE_SIZE));
@@ -170,34 +226,20 @@ async function load(view, state, opts = {}) {
 function renderContent(view, state) {
   const content = view.querySelector("#cr-content");
   const linhas = state.linhas;
-  const linhasAtivas = linhas.filter((l) => l.status !== "cancelado");
-
-  // "Recebido" = já entrou (vendas, manual, parcelas pagas). Parcelas
-  // pendentes NÃO entram aqui — elas são o que ainda falta receber, por
-  // isso ganham o próprio total (totalAReceber) em vez de inflar o que já
-  // foi de fato recebido no período.
-  const linhasRecebidas = linhasAtivas.filter((l) => l.status !== "pendente");
-  const linhasPendentes = linhasAtivas.filter((l) => l.status === "pendente");
-
-  const totalRecebido = linhasRecebidas.reduce((sum, l) => sum + l.valor, 0);
-  const totalVendas = linhasRecebidas.filter((l) => l.origem === "venda").reduce((sum, l) => sum + l.valor, 0);
-  const totalMatriculas = linhasRecebidas.filter((l) => l.origem === "matricula").reduce((sum, l) => sum + l.valor, 0);
-  const totalAReceber = linhasPendentes.reduce((sum, l) => sum + l.valor, 0);
 
   const totalPages = Math.max(1, Math.ceil(linhas.length / PAGE_SIZE));
   const from = state.page * PAGE_SIZE;
   const linhasPagina = linhas.slice(from, from + PAGE_SIZE);
 
+  const { statsHtml, sectionTitle, emptyMessage } = state.somentePendentes
+    ? statsPendentes(linhas)
+    : statsPeriodo(linhas);
+
   content.innerHTML = `
-    <div class="stat-grid">
-      ${statCard("Total recebido no período", formatCurrency(totalRecebido), "var(--accent-deep)")}
-      ${statCard("Recebido em vendas", formatCurrency(totalVendas), "var(--accent)")}
-      ${statCard("Recebido em matrículas", formatCurrency(totalMatriculas), "var(--info)")}
-      ${statCard("A receber (parcelas pendentes)", formatCurrency(totalAReceber), "var(--amber)")}
-    </div>
+    <div class="stat-grid">${statsHtml}</div>
     <div class="card card-section">
-      <p class="section-title">Recebimentos</p>
-      ${renderTabela(linhasPagina)}
+      <p class="section-title">${sectionTitle}</p>
+      ${renderTabela(linhasPagina, emptyMessage)}
       ${totalPages > 1 ? `
         <div class="pagination">
           <button type="button" class="btn btn--ghost btn--sm" id="cr-page-prev" ${state.page === 0 ? "disabled" : ""}>‹ Anterior</button>
@@ -250,6 +292,52 @@ function statCard(label, value, tagColor) {
   `;
 }
 
+// "Recebido" = já entrou (vendas, manual, parcelas pagas). Parcelas
+// pendentes NÃO entram aqui — elas são o que ainda falta receber, por isso
+// ganham o próprio total em vez de inflar o que já foi de fato recebido no
+// período selecionado.
+function statsPeriodo(linhas) {
+  const linhasAtivas = linhas.filter((l) => l.status !== "cancelado");
+  const linhasRecebidas = linhasAtivas.filter((l) => l.status !== "pendente");
+  const linhasPendentes = linhasAtivas.filter((l) => l.status === "pendente");
+
+  const totalRecebido = linhasRecebidas.reduce((sum, l) => sum + l.valor, 0);
+  const totalVendas = linhasRecebidas.filter((l) => l.origem === "venda").reduce((sum, l) => sum + l.valor, 0);
+  const totalMatriculas = linhasRecebidas.filter((l) => l.origem === "matricula").reduce((sum, l) => sum + l.valor, 0);
+  const totalAReceber = linhasPendentes.reduce((sum, l) => sum + l.valor, 0);
+
+  return {
+    statsHtml: [
+      statCard("Total recebido no período", formatCurrency(totalRecebido), "var(--accent-deep)"),
+      statCard("Recebido em vendas", formatCurrency(totalVendas), "var(--accent)"),
+      statCard("Recebido em matrículas", formatCurrency(totalMatriculas), "var(--info)"),
+      statCard("A receber (parcelas pendentes)", formatCurrency(totalAReceber), "var(--amber)"),
+    ].join(""),
+    sectionTitle: "Recebimentos",
+    emptyMessage: "Nenhum valor recebido ou a receber neste período.",
+  };
+}
+
+// Modo "Só pendentes": lista fechada de parcelas de matrícula pendentes, de
+// qualquer vencimento (passado ou futuro) — separa quem está em atraso
+// (vencimento já passou) de quem só ainda não venceu.
+function statsPendentes(linhas) {
+  const vencidas = linhas.filter((l) => l.vencida);
+  const totalPendente = linhas.reduce((sum, l) => sum + l.valor, 0);
+  const totalVencido = vencidas.reduce((sum, l) => sum + l.valor, 0);
+
+  return {
+    statsHtml: [
+      statCard("Total pendente (todos os vencimentos)", formatCurrency(totalPendente), "var(--amber)"),
+      statCard("Parcelas pendentes", linhas.length, "var(--text-muted)"),
+      statCard("Parcelas em atraso", vencidas.length, vencidas.length > 0 ? "var(--danger)" : "var(--text-muted)"),
+      statCard("Valor em atraso", formatCurrency(totalVencido), vencidas.length > 0 ? "var(--danger)" : "var(--text-muted)"),
+    ].join(""),
+    sectionTitle: "Parcelas pendentes (todos os vencimentos)",
+    emptyMessage: "Nenhuma parcela pendente no momento.",
+  };
+}
+
 const ORIGEM_LABEL = {
   venda: (l) => `Venda #${l.numero}`,
   manual: () => "Manual",
@@ -266,9 +354,9 @@ const STATUS_META = {
   cancelado: { cls: "cancelada", label: "Cancelado" },
 };
 
-function renderTabela(linhas) {
+function renderTabela(linhas, emptyMessage = "Nenhum valor recebido ou a receber neste período.") {
   if (linhas.length === 0) {
-    return '<div class="empty-state" style="padding: 1.5rem;">Nenhum valor recebido ou a receber neste período.</div>';
+    return `<div class="empty-state" style="padding: 1.5rem;">${escapeHtml(emptyMessage)}</div>`;
   }
   return `
     <div class="table-wrap">
@@ -278,7 +366,12 @@ function renderTabela(linhas) {
         </thead>
         <tbody>
           ${linhas.map((l) => {
-            const statusMeta = STATUS_META[l.status] || { cls: l.status, label: l.status };
+            // Parcela pendente com vencimento já passado ganha o selo
+            // "Atrasada" (vermelho) em vez do "Pendente" (amarelo) neutro —
+            // vale tanto na listagem por período quanto em "Só pendentes".
+            const statusMeta = l.vencida
+              ? { cls: "atrasada", label: "Atrasada" }
+              : (STATUS_META[l.status] || { cls: l.status, label: l.status });
             return `
             <tr>
               <td>${formatDate(l.data)}</td>
