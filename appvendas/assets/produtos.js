@@ -57,7 +57,6 @@ export async function render(view, actionsEl) {
       { key: "categoria", label: "Categoria" },
       { key: "preco", label: "Preço de venda", type: "number", step: "0.01", required: true, default: 0 },
       { key: "custo", label: "Custo", type: "number", step: "0.01", default: 0 },
-      { key: "estoque", label: "Estoque atual", type: "number", step: "1", required: true, default: 0 },
       { key: "estoque_minimo", label: "Estoque mínimo", type: "number", step: "1", default: 0 },
       { key: "fornecedor_id", label: "Fornecedor", type: "search-select", dependsOn: "empresa_id", optionsLoader: loadFornecedorOptions },
       { key: "descricao", label: "Descrição", type: "textarea", full: true },
