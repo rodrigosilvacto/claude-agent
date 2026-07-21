@@ -10,7 +10,7 @@
 // manualmente no balcão (ver "Registrar pagamento" no detalhe da matrícula).
 
 import { supabase } from "./supabaseClient.js";
-import { showToast, openModal, closeModal, confirmDialog, formatCurrency, formatDate, escapeHtml, createSearchSelect, registerAutoRefresh, consumeMatriculaPrefill, withButtonLock, friendlyPgError } from "./app.js";
+import { showToast, openModal, closeModal, confirmDialog, formatCurrency, formatDate, escapeHtml, createSearchSelect, registerAutoRefresh, consumeMatriculaPrefill, setMatriculaPrefill, withButtonLock, friendlyPgError } from "./app.js";
 import { isAdmin } from "./auth.js";
 import { loadClientesAtivos, loadProdutosServicos, loadEmpresasAtivas, clienteSearchOptions, produtoSearchOptions, empresaSearchOptions, produtoMetaPreco } from "./catalogo.js";
 import { FORMAS_PAGAMENTO, paytilesHtml, mountPaytiles, chamarCriarCheckoutStripe, mostrarModalStripe } from "./pagamento.js";
@@ -20,8 +20,13 @@ let produtosOptions = [];
 let empresasOptions = [];
 // Id do agendamento que originou a matrícula em andamento (fluxo Agenda →
 // Matrículas, via setMatriculaPrefill/consumeMatriculaPrefill em app.js).
-// Null numa matrícula avulsa.
+// Null numa matrícula avulsa ou numa renovação.
 let agendamentoOrigemId = null;
+// Referência à função activate(tab) de render() — permite que "Renovar
+// matrícula" (chamada de dentro do modal de detalhes, na aba Histórico)
+// volte pra aba "Nova matrícula" já com os dados prontos, sem depender de
+// mudar o hash da rota (não dispara "hashchange" se já estiver em #/matriculas).
+let activateTab = null;
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
@@ -54,6 +59,7 @@ export async function render(view, actionsEl) {
 
   tabNova.addEventListener("click", () => activate("nova"));
   tabHistorico.addEventListener("click", () => activate("historico"));
+  activateTab = activate;
 
   [clientesOptions, produtosOptions, empresasOptions] = await Promise.all([loadClientesAtivos(), loadProdutosServicos(), loadEmpresasAtivas()]);
 
@@ -68,9 +74,13 @@ function renderNovaMatricula(content) {
   content.innerHTML = `
     <div class="venda-layout">
       <div class="card card-section venda-itens">
-        ${prefill ? `
+        ${prefill?.agendamentoId ? `
           <div class="form-info">
             Confirmando atendimento de ${escapeHtml(prefill.clienteNome || "cliente sem cadastro")} em ${formatDate(prefill.dataAgendamento)} às ${prefill.horario}. Revise os dados e finalize para registrar a matrícula.
+          </div>
+        ` : prefill?.renovacao ? `
+          <div class="form-info">
+            Renovando a matrícula #${prefill.origemNumero} de ${escapeHtml(prefill.clienteNome || "cliente")}. Cliente, curso, duração, parcelas e forma de pagamento vieram preenchidos — revise e finalize para criar a nova matrícula.
           </div>
         ` : ""}
         ${admin ? `
@@ -137,10 +147,15 @@ function renderNovaMatricula(content) {
     </div>
   `;
 
-  const paytiles = mountPaytiles(content.querySelector("#m-forma"));
+  const paytiles = mountPaytiles(content.querySelector("#m-forma"), prefill?.renovacao ? prefill.formaPagamento : undefined);
   const descontoInput = content.querySelector("#m-desconto");
   const mesesInput = content.querySelector("#m-meses");
   const parcelasInput = content.querySelector("#m-parcelas");
+
+  if (prefill?.renovacao) {
+    if (prefill.meses) mesesInput.value = prefill.meses;
+    if (prefill.numeroParcelas) parcelasInput.value = prefill.numeroParcelas;
+  }
 
   const obsToggle = content.querySelector("#m-obs-toggle");
   const obsField = content.querySelector("#m-obs-field");
@@ -151,10 +166,14 @@ function renderNovaMatricula(content) {
     obsInput.focus();
   });
 
-  if (prefill) {
+  if (prefill?.agendamentoId) {
     obsField.hidden = false;
     obsToggle.hidden = true;
     obsInput.value = `Matrícula referente ao atendimento agendado em ${formatDate(prefill.dataAgendamento)} às ${prefill.horario}.${prefill.observacoes ? ` Obs. do agendamento: ${prefill.observacoes}` : ""}`;
+  } else if (prefill?.renovacao) {
+    obsField.hidden = false;
+    obsToggle.hidden = true;
+    obsInput.value = `Renovação da matrícula #${prefill.origemNumero}.`;
   }
 
   const empresaSelect = admin
@@ -496,12 +515,31 @@ async function showDetail(matriculaId, onChange) {
         </table>
       </div>
 
-      ${matricula.status !== "cancelada" ? `
+      ${matricula.status !== "aguardando_pagamento" ? `
         <div class="form-actions">
-          <button type="button" class="btn btn--danger" id="md-cancelar">Cancelar matrícula</button>
+          <button type="button" class="btn btn--ghost" id="md-renovar">Renovar matrícula</button>
+          ${matricula.status !== "cancelada" ? `<button type="button" class="btn btn--danger" id="md-cancelar">Cancelar matrícula</button>` : ""}
         </div>
       ` : ""}
     `;
+
+    const renovarBtn = body.querySelector("#md-renovar");
+    if (renovarBtn) {
+      renovarBtn.addEventListener("click", () => {
+        setMatriculaPrefill({
+          renovacao: true,
+          origemNumero: matricula.numero,
+          clienteId: matricula.cliente_id,
+          clienteNome: matricula.cliente?.nome || null,
+          produtoId: matricula.produto_id,
+          meses: matricula.meses,
+          numeroParcelas: matricula.numero_parcelas,
+          formaPagamento: matricula.forma_pagamento,
+        });
+        closeModal();
+        if (activateTab) activateTab("nova");
+      });
+    }
 
     body.querySelectorAll("[data-pagar]").forEach((btn) => {
       btn.addEventListener("click", () => {

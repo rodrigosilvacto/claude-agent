@@ -171,6 +171,70 @@ retroativamente se mexer no schema de novo.
 > conta pessoal — a senha está no gerenciador de senhas interno, não neste
 > arquivo. Rotacionar/remover antes de abrir o app além do piloto interno.
 
+### Lembretes e cobranças (`supabase/functions/appvendas-lembretes`)
+
+Comunicação proativa com o aluno — antes o app era 100% reativo (nada
+avisava ninguém fora de alguém abrir o painel). Dois lembretes automáticos:
+
+- **Lembrete de aula:** no dia anterior, para agendamentos com status
+  `agendado` e cliente vinculado (tabela `agendamentos`, coluna
+  `lembrete_enviado_em` controla que cada agendamento só recebe um lembrete).
+- **Cobrança de parcela vencida:** para parcelas de matrícula `pendente`
+  com vencimento no passado, reenviada a cada 3 dias enquanto continuar em
+  aberto (`matricula_parcelas.cobranca_enviada_em`).
+
+Cada lembrete tenta WhatsApp primeiro (se o cliente tiver telefone) e cai
+para e-mail (se tiver e-mail); sem nenhum dos dois, só marca como
+processado para não ficar reprocessando.
+
+> **Reaproveita a infra do Oráculo (Z-API/Resend), de propósito:** não são
+> secrets novas — é o mesmo número de WhatsApp já conectado
+> (`ZAPI_INSTANCE_ID`/`ZAPI_TOKEN`/`ZAPI_CLIENT_TOKEN`) e a mesma conta
+> Resend (`RESEND_API_KEY`) usados pelo `oraculo-webhook`. Isso foi uma
+> escolha deliberada — o roadmap já descrevia essa infra como "pronta,
+> ociosa" para o AppVendas — não uma obrigação: se fizer mais sentido ter um
+> número de WhatsApp Business dedicado ao AppVendas (separado do Oráculo,
+> que dá conselhos pessoais a quem escrever), basta apontar
+> `ZAPI_INSTANCE_ID`/`ZAPI_TOKEN` para uma instância própria nas secrets do
+> projeto.
+
+**Setup:**
+
+1. Aplicar a migration `supabase/migrations/0021_faixa_roxa_comunicacao_e_presenca.sql`.
+2. Deploy sem verificação de JWT (quem chama é o scheduler, não um cliente
+   Supabase autenticado — mesmo racional de `oraculo-webhook`):
+   ```
+   supabase functions deploy appvendas-lembretes --no-verify-jwt
+   ```
+3. Configurar a secret própria do endpoint (além das já existentes
+   `ZAPI_INSTANCE_ID`/`ZAPI_TOKEN`/`ZAPI_CLIENT_TOKEN`/`RESEND_API_KEY`, que
+   provavelmente já estão configuradas para o Oráculo):
+   ```
+   supabase secrets set APPVENDAS_LEMBRETES_SECRET=<string aleatória sua>
+   ```
+4. **Agendar a chamada — a function não tem cron embutido, só processa o
+   que encontrar quando é chamada.** Duas opções:
+   - Supabase Cron (Database → Cron Jobs no painel, usa `pg_cron` +
+     `pg_net`): agendar um `POST`/`GET` diário para
+     `https://<seu-projeto>.supabase.co/functions/v1/appvendas-lembretes?secret=<APPVENDAS_LEMBRETES_SECRET>`.
+   - Um scheduler externo (cron-job.org, GitHub Actions com `schedule`,
+     etc.) apontando pra essa mesma URL 1x por dia.
+
+### Badges de pendência no menu, renovar matrícula e check-in de presença
+
+- **Badges no menu** (`app.js`, `refreshPendencyBadges`): contador de
+  parcelas vencidas ao lado de "Contas a Receber" e de produtos com estoque
+  baixo ao lado de "Estoques", atualizados a cada minuto — antes só
+  apareciam abrindo o painel Início.
+- **Renovar matrícula** (`matriculas.js`, botão no detalhe): pré-preenche
+  uma nova matrícula com cliente, curso, duração, parcelas e forma de
+  pagamento da matrícula original, reaproveitando o mesmo mecanismo de
+  prefill já usado no fluxo Agenda → Matrículas.
+- **Check-in de presença** (`agenda.js`, coluna
+  `agendamentos.presenca_confirmada`): registro de frequência do aluno
+  independente do status agendado/atendido — que hoje só muda quando o
+  atendimento vira venda ou matrícula.
+
 ### Cache do `app.js` — NÃO adicione `?v=N` no `<script>` de entrada
 
 Ao contrário do Reports Panel (ver seção seguinte), o `<script>` de entrada

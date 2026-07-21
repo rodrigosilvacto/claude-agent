@@ -222,6 +222,24 @@ svg {
   transition: color 0.12s ease;
 }
 
+/* Contador de pendências (parcelas vencidas, estoque baixo) — visível no
+   menu o tempo todo, não só ao abrir o painel Início (ver app.js,
+   refreshPendencyBadges). */
+.nav-link__badge {
+  flex-shrink: 0;
+  margin-left: auto;
+  min-width: 1.35rem;
+  height: 1.35rem;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: var(--danger);
+  color: #ffffff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.35rem;
+  text-align: center;
+}
+
 .nav-link:hover {
   background: var(--ink-soft);
   color: #ffffff;

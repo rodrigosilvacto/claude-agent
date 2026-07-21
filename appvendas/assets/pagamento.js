@@ -60,17 +60,26 @@ export function paytilesHtml() {
   `).join("");
 }
 
-export function mountPaytiles(groupEl) {
-  let value = FORMAS_PAGAMENTO[0].label;
+// `initialValue` permite pré-selecionar um tile diferente do padrão
+// ("Dinheiro") — usado por "Renovar matrícula" pra sugerir a mesma forma de
+// pagamento da matrícula original.
+export function mountPaytiles(groupEl, initialValue) {
+  let value = FORMAS_PAGAMENTO.some((f) => f.label === initialValue) ? initialValue : FORMAS_PAGAMENTO[0].label;
+
+  function applyActive() {
+    groupEl.querySelectorAll(".paytile").forEach((b) => {
+      const active = b.dataset.value === value;
+      b.classList.toggle("is-active", active);
+      b.setAttribute("aria-checked", String(active));
+    });
+  }
+  applyActive();
+
   groupEl.addEventListener("click", (e) => {
     const btn = e.target.closest("[data-value]");
     if (!btn) return;
     value = btn.dataset.value;
-    groupEl.querySelectorAll(".paytile").forEach((b) => {
-      const active = b === btn;
-      b.classList.toggle("is-active", active);
-      b.setAttribute("aria-checked", String(active));
-    });
+    applyActive();
   });
   return { getValue: () => value };
 }

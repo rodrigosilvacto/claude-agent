@@ -68,7 +68,7 @@ function horaAtual() {
 async function loadAgendamentos(startKey, endKey) {
   const { data, error } = await supabase
     .from("agendamentos")
-    .select("id, data_agendamento, horario, status, observacoes, cliente_id, produto_id, empresa_id, cliente:clientes(nome), produto:produtos(nome, tipo)")
+    .select("id, data_agendamento, horario, status, observacoes, cliente_id, produto_id, empresa_id, presenca_confirmada, cliente:clientes(nome), produto:produtos(nome, tipo)")
     .neq("status", "cancelado")
     .gte("data_agendamento", startKey)
     .lte("data_agendamento", endKey)
@@ -287,6 +287,30 @@ async function renderDia(body, anchor, onChange) {
     });
   });
 
+  // Check-in de presença: independente do status agendado/atendido (que
+  // controla se virou venda/matrícula) — um aluno pode ter comparecido à
+  // aula mesmo sem gerar cobrança nesse horário específico.
+  body.querySelectorAll("[data-presenca]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const ag = rows.find((r) => r.id === btn.dataset.presenca);
+      if (!ag) return;
+      const novoValor = btn.dataset.presencaAtual !== "1";
+      const { error } = await supabase
+        .from("agendamentos")
+        .update({
+          presenca_confirmada: novoValor,
+          presenca_confirmada_em: novoValor ? new Date().toISOString() : null,
+        })
+        .eq("id", ag.id);
+      if (error) {
+        showToast(friendlyPgError(error), "error");
+        return;
+      }
+      showToast(novoValor ? "Presença confirmada." : "Presença desfeita.");
+      onChange();
+    });
+  });
+
   // Cancelar em vez de excluir de fato — mantém o registro no banco como
   // rastro de quem cancelou o quê (ver migration 0019); o horário libera pro
   // índice parcial e some da grade do mesmo jeito que uma exclusão faria.
@@ -326,6 +350,15 @@ function slotHtml(hora, ag, { isAgora = false, isPassado = false } = {}) {
   const detalhe = [ag.produto?.nome, ag.observacoes].filter(Boolean).join(" · ");
   const railColor = atendido ? "var(--success)" : atrasado ? "var(--danger)" : "var(--warning)";
 
+  // Presença é independente do status agendado/atendido — por isso o botão
+  // aparece sempre que há um cliente vinculado, mesmo depois de "Atendido"
+  // esconder as demais ações.
+  const presencaBtn = ag.cliente_id ? `
+    <button type="button" class="btn btn--sm ${ag.presenca_confirmada ? "btn--primary" : "btn--ghost"}" data-presenca="${ag.id}" data-presenca-atual="${ag.presenca_confirmada ? "1" : "0"}" title="${ag.presenca_confirmada ? "Presença confirmada — clique para desfazer" : "Marcar presença do aluno na aula"}">
+      ${ag.presenca_confirmada ? "✓ Presença" : "Marcar presença"}
+    </button>
+  ` : "";
+
   return `
     <div class="agenda-slot cell-rail ${atendido ? "agenda-slot--atendido" : "agenda-slot--agendado"} ${stateClasses}" style="--rail-color: ${railColor}">
       <span class="agenda-slot__hora">${hora}${agoraTag}</span>
@@ -336,6 +369,7 @@ function slotHtml(hora, ag, { isAgora = false, isPassado = false } = {}) {
       </div>
       <div class="agenda-slot__actions">
         <span class="status status--${atendido ? "atendido" : "agendado"}">${atendido ? "Atendido" : "Agendado"}</span>
+        ${presencaBtn}
         ${atendido ? "" : `
           <button type="button" class="btn btn--primary btn--sm" data-atendido="${ag.id}">Atendido</button>
           <button type="button" class="btn btn--ghost btn--sm" data-editar="${ag.id}">Editar</button>

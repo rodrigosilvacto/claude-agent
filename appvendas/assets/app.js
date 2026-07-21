@@ -3,6 +3,7 @@
 // `render(view)` e monta seu próprio HTML dentro do container recebido.
 
 import { initAuth, isLoggedIn, isAdmin, isGlobalAdmin, getCurrentUsuario, signOut, onAuthChange } from "./auth.js";
+import { supabase } from "./supabaseClient.js";
 
 // Usados como fallback quando a empresa do usuário logado não tem
 // `nome_aplicacao` configurado (ou quando o usuário é admin global, sem
@@ -24,7 +25,7 @@ const CONFIGURABLE_MENU_KEYS = ["clientes", "produtos", "fornecedores", "vendas"
 // ES modules carregar duas instâncias do módulo (hashchange listener e
 // boot() duplicados). Ver commit e4f8448 (correção original) e 3659424/
 // e75bd3a (reintrodução e reversão do bug).
-export const APP_BUILD = "2026-07-21 17:20 -03";
+export const APP_BUILD = "2026-07-21 19:05 -03";
 
 const ROUTES = {
   home: {
@@ -125,6 +126,8 @@ const userChipAvatar = document.getElementById("user-chip-avatar");
 const userChipName = document.getElementById("user-chip-name");
 const userChipMeta = document.getElementById("user-chip-meta");
 const logoutBtn = document.getElementById("logout-btn");
+const navBadgeContasReceber = document.getElementById("nav-badge-contas-receber");
+const navBadgeEstoques = document.getElementById("nav-badge-estoques");
 
 // Diagnóstico de cache: se este build não bater com o timestamp do último
 // commit em app.js, o navegador está servindo uma cópia antiga em cache —
@@ -138,6 +141,57 @@ function initials(nome) {
   return (parts[0][0] + (parts[1]?.[0] || "")).toUpperCase();
 }
 
+// ── Badges de pendência no menu (faixa roxa do roadmap) ──────────────
+//
+// Antes, estoque baixo e parcelas vencidas só apareciam abrindo o painel
+// Início — o app era 100% reativo. Estes badges ficam visíveis no menu o
+// tempo todo (contados a cada minuto), independente de qual tela está
+// aberta. Ficam escondidos (não zerados) enquanto ninguém está logado.
+
+function setNavBadge(el, count) {
+  if (!el) return;
+  if (count > 0) {
+    el.textContent = count > 99 ? "99+" : String(count);
+    el.hidden = false;
+  } else {
+    el.hidden = true;
+  }
+}
+
+function hidePendencyBadges() {
+  setNavBadge(navBadgeContasReceber, 0);
+  setNavBadge(navBadgeEstoques, 0);
+}
+
+async function refreshPendencyBadges() {
+  const hoje = new Date().toISOString().slice(0, 10);
+  const [parcelasRes, produtosRes] = await Promise.all([
+    supabase.from("matricula_parcelas").select("id", { count: "exact", head: true }).eq("status", "pendente").lt("data_vencimento", hoje),
+    supabase.from("produtos").select("estoque, estoque_minimo").eq("ativo", true),
+  ]);
+
+  if (parcelasRes.error) console.error("Falha ao atualizar badge de contas a receber:", parcelasRes.error);
+  else setNavBadge(navBadgeContasReceber, parcelasRes.count || 0);
+
+  if (produtosRes.error) console.error("Falha ao atualizar badge de estoque baixo:", produtosRes.error);
+  else setNavBadge(navBadgeEstoques, (produtosRes.data || []).filter((p) => p.estoque <= p.estoque_minimo).length);
+}
+
+let badgeRefreshTimer = null;
+
+function startBadgeRefresh() {
+  stopBadgeRefresh();
+  refreshPendencyBadges();
+  badgeRefreshTimer = setInterval(refreshPendencyBadges, 60000);
+}
+
+function stopBadgeRefresh() {
+  if (badgeRefreshTimer) {
+    clearInterval(badgeRefreshTimer);
+    badgeRefreshTimer = null;
+  }
+}
+
 function updateAuthUI() {
   const usuario = getCurrentUsuario();
   const logged = isLoggedIn();
@@ -146,6 +200,12 @@ function updateAuthUI() {
   navUsuarios.hidden = !isAdmin();
   navEmpresas.hidden = !isGlobalAdmin();
   navConfiguracoes.hidden = !isGlobalAdmin();
+
+  if (logged) startBadgeRefresh();
+  else {
+    stopBadgeRefresh();
+    hidePendencyBadges();
+  }
 
   if (usuario) {
     userChipAvatar.textContent = initials(usuario.nome);
