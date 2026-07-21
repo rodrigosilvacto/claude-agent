@@ -512,8 +512,10 @@ async function showDetail(matriculaId, onChange) {
 
 // ── Modal de registrar pagamento de uma parcela — Stripe fica de fora aqui:
 // cobrar via Stripe exige o fluxo de Checkout Session (QR/link), não faz
-// sentido como uma opção de um <select> de baixa manual.
-function openPagamentoParcelaForm(parcelaId, onSaved) {
+// sentido como uma opção de um <select> de baixa manual. Exportado: também
+// usado em financeiro.js (Contas a Receber lista as parcelas pendentes de
+// matrícula ao lado de vendas/recebimentos manuais).
+export function openPagamentoParcelaForm(parcelaId, onSaved) {
   const body = openModal("Registrar pagamento da parcela");
 
   body.innerHTML = `

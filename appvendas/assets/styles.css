@@ -22,6 +22,11 @@
   --danger-deep: #9c331f;
   --danger-soft: #f9e2dc;
 
+  /* Chalkboard blue (info — origem "matrícula" em Contas a Receber) */
+  --info: #3a6ea8;
+  --info-deep: #2c5480;
+  --info-soft: #e1ebf5;
+
   --success: #2f8f52;
   --success-soft: #e4f3e9;
   --warning: #cf8a1f;
@@ -984,6 +989,7 @@ svg {
 .status--reprovado { color: var(--danger); background: var(--danger-soft); }
 .status--venda { color: var(--accent-deep); background: var(--accent-soft); }
 .status--manual { color: var(--amber-deep); background: var(--amber-soft); }
+.status--matricula { color: var(--info-deep); background: var(--info-soft); }
 
 /* ── Empty state ───────────────────────────────────────────────────── */
 

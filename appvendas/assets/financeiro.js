@@ -1,12 +1,16 @@
 // BjjConnect — Financeiro > Contas a Receber: lista tudo que foi recebido no
-// período (vendas confirmadas + lançamentos manuais) e permite registrar um
-// recebimento manual avulso (além de vendas), que também exige um produto e
-// reduz o estoque dele — mesmo padrão de criar_venda/cancelar_venda.
+// período (vendas confirmadas + lançamentos manuais + parcelas pagas de
+// matrícula) e o que ainda está por vir (parcelas de matrícula pendentes,
+// com vencimento no período — títulos a receber de verdade, ver
+// supabase/migrations/0015). Também permite registrar um recebimento manual
+// avulso (além de vendas), que exige um produto e reduz o estoque dele —
+// mesmo padrão de criar_venda/cancelar_venda.
 
 import { supabase } from "./supabaseClient.js";
 import { showToast, openModal, closeModal, confirmDialog, formatCurrency, formatDate, escapeHtml, createSearchSelect, registerAutoRefresh, withButtonLock, friendlyPgError } from "./app.js";
 import { isAdmin, getCurrentEmpresaId } from "./auth.js";
 import { loadClientesAtivos, loadProdutosAtivos, loadEmpresasAtivas, clienteSearchOptions, produtoSearchOptions, empresaSearchOptions, produtoMetaPrecoEstoque } from "./catalogo.js";
+import { openPagamentoParcelaForm } from "./matriculas.js";
 
 const FORMAS_PAGAMENTO = ["Dinheiro", "Pix", "Cartão de crédito", "Cartão de débito", "Boleto"];
 
@@ -30,8 +34,20 @@ function firstDayOfMonthStr() {
   return `${todayStr().slice(0, 7)}-01`;
 }
 
+// Última data do mês atual + `monthsAhead` meses à frente — usado só como
+// teto padrão do filtro "Até". Sem isso, o "Até" parava em hoje e as
+// parcelas de matrícula futuras (o próprio motivo de existir esta tela)
+// ficavam escondidas até alguém alargar o filtro manualmente.
+function lastDayOfMonthPlusStr(monthsAhead) {
+  const d = new Date();
+  return new Date(d.getFullYear(), d.getMonth() + 1 + monthsAhead, 0).toISOString().slice(0, 10);
+}
+
 export async function render(view, actionsEl) {
-  const state = { inicio: firstDayOfMonthStr(), fim: todayStr(), page: 0, linhas: [] };
+  // "Até" olha 1 mês à frente por padrão — cobre a próxima parcela de
+  // matrícula a vencer sem inflar demais a lista com vencimentos distantes;
+  // o operador pode alargar o filtro pra ver mais.
+  const state = { inicio: firstDayOfMonthStr(), fim: lastDayOfMonthPlusStr(1), page: 0, linhas: [] };
 
   [clientesOptions, produtosOptions, empresasOptions] = await Promise.all([loadClientesAtivos(), loadProdutosAtivos(), loadEmpresasAtivas()]);
 
@@ -78,7 +94,7 @@ async function load(view, state, opts = {}) {
   const content = view.querySelector("#cr-content");
   if (!silent) content.innerHTML = `<div class="empty-state">Carregando…</div>`;
 
-  const [vendasRes, recebimentosRes] = await Promise.all([
+  const [vendasRes, recebimentosRes, parcelasRes] = await Promise.all([
     supabase
       .from("vendas")
       .select("id, numero, data_venda, forma_pagamento, total, cliente:clientes(nome), itens:venda_itens(quantidade, produto:produtos(nome))")
@@ -92,10 +108,19 @@ async function load(view, state, opts = {}) {
       .gte("data_recebimento", state.inicio)
       .lte("data_recebimento", state.fim)
       .limit(FETCH_CAP),
+    // Parcelas de matrícula: parcela paga entra pela data em que foi
+    // recebida; parcela pendente entra pela data de vencimento — é isso que
+    // faz dela um título "a receber" de verdade (aparece no período em que
+    // vence, não em que foi lançada).
+    supabase
+      .from("matricula_parcelas")
+      .select("id, numero_parcela, valor, data_vencimento, data_pagamento, forma_pagamento, status, cliente:clientes(nome), matricula:matriculas(numero, numero_parcelas, produto:produtos(nome))")
+      .or(`and(status.eq.pago,data_pagamento.gte.${state.inicio},data_pagamento.lte.${state.fim}),and(status.eq.pendente,data_vencimento.gte.${state.inicio},data_vencimento.lte.${state.fim})`)
+      .limit(FETCH_CAP),
   ]);
 
-  if (vendasRes.error || recebimentosRes.error) {
-    const err = vendasRes.error || recebimentosRes.error;
+  if (vendasRes.error || recebimentosRes.error || parcelasRes.error) {
+    const err = vendasRes.error || recebimentosRes.error || parcelasRes.error;
     content.innerHTML = `<div class="empty-state"><p class="empty-state__title">Não foi possível carregar os recebimentos</p><p class="empty-state__hint">${escapeHtml(friendlyPgError(err))}</p></div>`;
     return;
   }
@@ -123,7 +148,19 @@ async function load(view, state, opts = {}) {
     status: r.status,
   }));
 
-  state.linhas = [...linhasVendas, ...linhasManuais].sort((a, b) => new Date(b.data) - new Date(a.data));
+  const linhasParcelas = (parcelasRes.data || []).map((p) => ({
+    origem: "matricula",
+    id: p.id,
+    data: p.status === "pago" ? p.data_pagamento : p.data_vencimento,
+    cliente: p.cliente?.nome || "Sem cliente",
+    itens: `Parcela ${p.numero_parcela}/${p.matricula?.numero_parcelas ?? "?"} — ${p.matricula?.produto?.nome || "Curso"}`,
+    formaPagamento: p.forma_pagamento,
+    valor: Number(p.valor || 0),
+    status: p.status,
+    numero: p.matricula?.numero,
+  }));
+
+  state.linhas = [...linhasVendas, ...linhasManuais, ...linhasParcelas].sort((a, b) => new Date(b.data) - new Date(a.data));
   const totalPages = Math.max(1, Math.ceil(state.linhas.length / PAGE_SIZE));
   state.page = Math.min(state.page, totalPages - 1);
 
@@ -135,9 +172,17 @@ function renderContent(view, state) {
   const linhas = state.linhas;
   const linhasAtivas = linhas.filter((l) => l.status !== "cancelado");
 
-  const totalRecebido = linhasAtivas.reduce((sum, l) => sum + l.valor, 0);
-  const totalVendas = linhasAtivas.filter((l) => l.origem === "venda").reduce((sum, l) => sum + l.valor, 0);
-  const totalManual = linhasAtivas.filter((l) => l.origem === "manual").reduce((sum, l) => sum + l.valor, 0);
+  // "Recebido" = já entrou (vendas, manual, parcelas pagas). Parcelas
+  // pendentes NÃO entram aqui — elas são o que ainda falta receber, por
+  // isso ganham o próprio total (totalAReceber) em vez de inflar o que já
+  // foi de fato recebido no período.
+  const linhasRecebidas = linhasAtivas.filter((l) => l.status !== "pendente");
+  const linhasPendentes = linhasAtivas.filter((l) => l.status === "pendente");
+
+  const totalRecebido = linhasRecebidas.reduce((sum, l) => sum + l.valor, 0);
+  const totalVendas = linhasRecebidas.filter((l) => l.origem === "venda").reduce((sum, l) => sum + l.valor, 0);
+  const totalMatriculas = linhasRecebidas.filter((l) => l.origem === "matricula").reduce((sum, l) => sum + l.valor, 0);
+  const totalAReceber = linhasPendentes.reduce((sum, l) => sum + l.valor, 0);
 
   const totalPages = Math.max(1, Math.ceil(linhas.length / PAGE_SIZE));
   const from = state.page * PAGE_SIZE;
@@ -147,8 +192,8 @@ function renderContent(view, state) {
     <div class="stat-grid">
       ${statCard("Total recebido no período", formatCurrency(totalRecebido), "var(--accent-deep)")}
       ${statCard("Recebido em vendas", formatCurrency(totalVendas), "var(--accent)")}
-      ${statCard("Recebido manualmente", formatCurrency(totalManual), "var(--amber)")}
-      ${statCard("Lançamentos no período", linhasAtivas.length, "var(--text-muted)")}
+      ${statCard("Recebido em matrículas", formatCurrency(totalMatriculas), "var(--info)")}
+      ${statCard("A receber (parcelas pendentes)", formatCurrency(totalAReceber), "var(--amber)")}
     </div>
     <div class="card card-section">
       <p class="section-title">Recebimentos</p>
@@ -178,6 +223,12 @@ function renderContent(view, state) {
     });
   });
 
+  content.querySelectorAll("[data-pagar-parcela]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      openPagamentoParcelaForm(btn.dataset.pagarParcela, () => load(view, state, { silent: true }));
+    });
+  });
+
   if (totalPages > 1) {
     content.querySelector("#cr-page-prev").addEventListener("click", () => {
       state.page = Math.max(0, state.page - 1);
@@ -199,9 +250,25 @@ function statCard(label, value, tagColor) {
   `;
 }
 
+const ORIGEM_LABEL = {
+  venda: (l) => `Venda #${l.numero}`,
+  manual: () => "Manual",
+  matricula: (l) => `Matrícula #${l.numero}`,
+};
+
+// pago/recebido são a mesma coisa em espírito (dinheiro já entrou) — status
+// bruto muda por origem (vendas/manual usam "recebido", parcelas de
+// matrícula usam "pago"/"pendente"), unificado aqui pro badge.
+const STATUS_META = {
+  recebido: { cls: "confirmada", label: "Recebido" },
+  pago: { cls: "confirmada", label: "Pago" },
+  pendente: { cls: "pendente", label: "Pendente" },
+  cancelado: { cls: "cancelada", label: "Cancelado" },
+};
+
 function renderTabela(linhas) {
   if (linhas.length === 0) {
-    return '<div class="empty-state" style="padding: 1.5rem;">Nenhum valor recebido neste período.</div>';
+    return '<div class="empty-state" style="padding: 1.5rem;">Nenhum valor recebido ou a receber neste período.</div>';
   }
   return `
     <div class="table-wrap">
@@ -210,20 +277,24 @@ function renderTabela(linhas) {
           <tr><th>Data</th><th>Origem</th><th>Cliente</th><th>Item(ns)</th><th>Pagamento</th><th style="text-align:right">Valor</th><th>Status</th><th></th></tr>
         </thead>
         <tbody>
-          ${linhas.map((l) => `
+          ${linhas.map((l) => {
+            const statusMeta = STATUS_META[l.status] || { cls: l.status, label: l.status };
+            return `
             <tr>
               <td>${formatDate(l.data)}</td>
-              <td><span class="status status--${l.origem}">${l.origem === "venda" ? `Venda #${l.numero}` : "Manual"}</span></td>
+              <td><span class="status status--${l.origem}">${ORIGEM_LABEL[l.origem]?.(l) || l.origem}</span></td>
               <td>${escapeHtml(l.cliente)}</td>
               <td>${escapeHtml(l.itens)}</td>
               <td class="cell-muted">${escapeHtml(l.formaPagamento || "—")}</td>
               <td class="cell-num">${formatCurrency(l.valor)}</td>
-              <td><span class="status status--${l.status === "recebido" ? "confirmada" : "cancelada"}">${l.status === "recebido" ? "Recebido" : "Cancelado"}</span></td>
+              <td><span class="status status--${statusMeta.cls}">${statusMeta.label}</span></td>
               <td class="cell-actions">
                 ${l.origem === "manual" && l.status === "recebido" ? `<button type="button" class="btn btn--danger btn--sm" data-cancelar="${l.id}">Cancelar</button>` : ""}
+                ${l.origem === "matricula" && l.status === "pendente" ? `<button type="button" class="btn btn--primary btn--sm" data-pagar-parcela="${l.id}">Registrar pagamento</button>` : ""}
               </td>
             </tr>
-          `).join("")}
+          `;
+          }).join("")}
         </tbody>
       </table>
     </div>
