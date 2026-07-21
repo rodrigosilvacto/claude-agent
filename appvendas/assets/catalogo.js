@@ -17,9 +17,23 @@ export async function loadClientesAtivos() {
   return data || [];
 }
 
-export async function loadProdutosAtivos(columns = "id, nome, sku, preco, estoque") {
+export async function loadProdutosAtivos(columns = "id, nome, sku, preco, estoque, tipo") {
   const { data } = await supabase.from("produtos").select(columns).eq("ativo", true).order("nome", { ascending: true });
   return data || [];
+}
+
+// Loja (vendas/entradas de estoque/recebimento manual) só deve oferecer
+// produto físico — "serviço" não tem estoque e é vendido/parcelado só pela
+// tela de Matrículas. Ver migration 0017 (produtos.tipo).
+export async function loadProdutosVendaveis(columns) {
+  return (await loadProdutosAtivos(columns)).filter((p) => p.tipo !== "servico");
+}
+
+// Matrículas só deve oferecer produto do tipo "serviço" — vender um produto
+// físico parcelado por aqui não faz sentido (ele nunca dá baixa de estoque
+// nesse fluxo).
+export async function loadProdutosServicos(columns) {
+  return (await loadProdutosAtivos(columns)).filter((p) => p.tipo === "servico");
 }
 
 // Só admins enxergam empresas de fora da própria — quem não é admin nem

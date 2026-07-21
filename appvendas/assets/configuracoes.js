@@ -6,6 +6,9 @@
 
 import { supabase } from "./supabaseClient.js";
 import { showToast, escapeHtml, friendlyPgError, createSearchSelect, DEFAULT_APP_NAME } from "./app.js";
+import { HORARIOS_PADRAO } from "./agenda.js";
+
+const HORARIO_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 const MENU_ITEMS = [
   { key: "clientes", label: "Clientes" },
@@ -63,7 +66,7 @@ async function renderConfigForm(formMount, empresaId) {
 
   const { data: empresa, error } = await supabase
     .from("empresas")
-    .select("id, nome_fantasia, nome_aplicacao, menus_habilitados")
+    .select("id, nome_fantasia, nome_aplicacao, menus_habilitados, horarios_agenda")
     .eq("id", empresaId)
     .single();
 
@@ -73,6 +76,7 @@ async function renderConfigForm(formMount, empresaId) {
   }
 
   const menus = empresa.menus_habilitados || {};
+  const horariosAtuais = (empresa.horarios_agenda || []).join(", ");
 
   formMount.innerHTML = `
     <form id="config-form">
@@ -99,6 +103,15 @@ async function renderConfigForm(formMount, empresaId) {
         </div>
       </div>
 
+      <div class="card card-section">
+        <p class="section-title">Horários da Agenda</p>
+        <div class="field field--full">
+          <label for="f-horarios-agenda">Horários de atendimento, separados por vírgula</label>
+          <input class="input" type="text" id="f-horarios-agenda" name="horarios_agenda" value="${escapeHtml(horariosAtuais)}" placeholder="${escapeHtml(HORARIOS_PADRAO.join(", "))} (padrão)" />
+          <p class="field-hint" id="f-horarios-agenda-hint">Formato 24h, "HH:MM" (ex.: 08:00, 08:30, 09:00…). Deixe em branco para usar a grade padrão do sistema.</p>
+        </div>
+      </div>
+
       <div class="form-actions">
         <button type="submit" class="btn btn--primary">Salvar configurações</button>
       </div>
@@ -116,10 +129,23 @@ async function renderConfigForm(formMount, empresaId) {
       menusHabilitados[item.key] = form.elements[`menu-${item.key}`].checked;
     });
 
+    const horariosRaw = form.elements.horarios_agenda.value.trim();
+    let horariosAgenda = null;
+    if (horariosRaw) {
+      horariosAgenda = horariosRaw.split(",").map((h) => h.trim()).filter(Boolean);
+      const invalido = horariosAgenda.find((h) => !HORARIO_RE.test(h));
+      if (invalido) {
+        errorEl.innerHTML = `<div class="form-error">Horário inválido: "${escapeHtml(invalido)}". Use o formato 24h "HH:MM" (ex.: 08:00), separado por vírgulas.</div>`;
+        return;
+      }
+      horariosAgenda = [...new Set(horariosAgenda)].sort();
+    }
+
     const { error: saveError } = await supabase.rpc("atualizar_config_empresa", {
       p_empresa_id: empresaId,
       p_nome_aplicacao: form.elements.nome_aplicacao.value,
       p_menus_habilitados: menusHabilitados,
+      p_horarios_agenda: horariosAgenda,
     });
 
     if (saveError) {

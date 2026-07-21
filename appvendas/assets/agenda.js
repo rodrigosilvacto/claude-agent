@@ -7,14 +7,25 @@
 // em app.js e o handler de "Finalizar venda" em vendas.js).
 
 import { supabase } from "./supabaseClient.js";
-import { showToast, openModal, closeModal, confirmDialog, escapeHtml, createSearchSelect, registerAutoRefresh, setVendaPrefill, withButtonLock, friendlyPgError } from "./app.js";
-import { isAdmin } from "./auth.js";
+import { showToast, openModal, closeModal, confirmDialog, escapeHtml, createSearchSelect, registerAutoRefresh, setVendaPrefill, setMatriculaPrefill, withButtonLock, friendlyPgError } from "./app.js";
+import { isAdmin, getCurrentUsuario } from "./auth.js";
 import { loadClientesAtivos, loadProdutosAtivos, loadEmpresasAtivas, clienteSearchOptions, produtoSearchOptions, empresaSearchOptions } from "./catalogo.js";
 
-// Horário de atendimento padrão da loja — ajuste aqui se mudar.
-const HORARIOS = ["08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00"];
+// Grade padrão de horários — usada quando a empresa do usuário logado não
+// tem horarios_agenda configurado (Administração > Configurações). Exportada
+// pra configuracoes.js mostrar como placeholder do campo de edição.
+export const HORARIOS_PADRAO = ["08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00"];
 const DIAS_SEMANA = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 const MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+
+// Admin global (sem empresa) sempre usa a grade padrão — a visão do
+// calendário já mistura agendamentos de todas as empresas para esse papel,
+// então não há "uma" empresa cujos horários customizados façam sentido
+// aplicar aqui.
+function getHorarios() {
+  const custom = getCurrentUsuario()?.empresa?.horarios_agenda;
+  return custom && custom.length > 0 ? custom : HORARIOS_PADRAO;
+}
 
 let clientesOptions = [];
 let produtosOptions = [];
@@ -43,7 +54,7 @@ function startOfWeek(d) {
   return addDays(d, -d.getDay());
 }
 
-// Horário cheio corrente, no mesmo formato de HORARIOS ("08:00") — usado
+// Horário cheio corrente, no mesmo formato de getHorarios() ("08:00") — usado
 // para destacar o horário atual e sinalizar horários já passados na
 // visão do dia. Comparação de string funciona pois o formato é fixo.
 function horaAtual() {
@@ -53,7 +64,7 @@ function horaAtual() {
 async function loadAgendamentos(startKey, endKey) {
   const { data, error } = await supabase
     .from("agendamentos")
-    .select("id, data_agendamento, horario, status, observacoes, cliente_id, produto_id, empresa_id, cliente:clientes(nome), produto:produtos(nome)")
+    .select("id, data_agendamento, horario, status, observacoes, cliente_id, produto_id, empresa_id, cliente:clientes(nome), produto:produtos(nome, tipo)")
     .gte("data_agendamento", startKey)
     .lte("data_agendamento", endKey)
     .order("horario", { ascending: true });
@@ -198,10 +209,11 @@ async function renderDia(body, anchor, onChange) {
 
   const byHorario = new Map(rows.map((r) => [r.horario.slice(0, 5), r]));
   const agora = isHoje ? horaAtual() : null;
+  const horarios = getHorarios();
 
   const resumo = { agendado: 0, atendido: 0 };
   rows.forEach((r) => resumo[r.status]++);
-  const livres = HORARIOS.length - rows.length;
+  const livres = horarios.length - rows.length;
 
   body.innerHTML = `
     <div class="card">
@@ -211,7 +223,7 @@ async function renderDia(body, anchor, onChange) {
         <span class="agenda-day__stat" style="--dot-color: var(--text-muted)">${livres} livre${livres === 1 ? "" : "s"}</span>
       </div>
       <div class="agenda-day">
-        ${HORARIOS.map((h) => slotHtml(h, byHorario.get(h), {
+        ${horarios.map((h) => slotHtml(h, byHorario.get(h), {
           isAgora: agora !== null && h === agora,
           isPassado: agora !== null && h < agora,
         })).join("")}
@@ -243,7 +255,7 @@ async function renderDia(body, anchor, onChange) {
     btn.addEventListener("click", () => {
       const ag = rows.find((r) => r.id === btn.dataset.atendido);
       if (!ag) return;
-      setVendaPrefill({
+      const prefill = {
         agendamentoId: ag.id,
         clienteId: ag.cliente_id,
         clienteNome: ag.cliente?.nome || null,
@@ -251,8 +263,17 @@ async function renderDia(body, anchor, onChange) {
         dataAgendamento: ag.data_agendamento,
         horario: ag.horario.slice(0, 5),
         observacoes: ag.observacoes || "",
-      });
-      window.location.hash = "#/vendas";
+      };
+      // Produto do agendamento decide o destino: serviço (curso/mensalidade)
+      // vira Matrícula, produto físico continua indo pra Vendas — ver
+      // migration 0017 (produtos.tipo).
+      if (ag.produto?.tipo === "servico") {
+        setMatriculaPrefill(prefill);
+        window.location.hash = "#/matriculas";
+      } else {
+        setVendaPrefill(prefill);
+        window.location.hash = "#/vendas";
+      }
     });
   });
 
@@ -509,7 +530,7 @@ async function openAgendamentoForm({ id = null, clienteId = null, produtoId = nu
       ocupados = new Set((rows || []).map((r) => r.horario.slice(0, 5)));
     }
     const manterSelecionado = preferido && !ocupados.has(preferido) ? preferido : horarioSelect.value;
-    horarioSelect.innerHTML = HORARIOS.map((h) => `
+    horarioSelect.innerHTML = getHorarios().map((h) => `
       <option value="${h}" ${ocupados.has(h) ? "disabled" : ""} ${h === manterSelecionado && !ocupados.has(h) ? "selected" : ""}>${h}${ocupados.has(h) ? " (ocupado)" : ""}</option>
     `).join("");
   }

@@ -9,7 +9,7 @@
 import { supabase } from "./supabaseClient.js";
 import { showToast, openModal, closeModal, confirmDialog, formatDate, escapeHtml, createSearchSelect, registerAutoRefresh, withButtonLock, friendlyPgError } from "./app.js";
 import { isAdmin, getCurrentEmpresaId } from "./auth.js";
-import { loadProdutosAtivos, loadEmpresasAtivas, produtoSearchOptions, empresaSearchOptions, produtoMetaPrecoEstoque } from "./catalogo.js";
+import { loadProdutosVendaveis, loadEmpresasAtivas, produtoSearchOptions, empresaSearchOptions, produtoMetaPrecoEstoque } from "./catalogo.js";
 
 const PAGE_SIZE = 50;
 
@@ -32,7 +32,7 @@ function lastDayOfMonthStr() {
 export async function render(view, actionsEl) {
   const state = { inicio: firstDayOfMonthStr(), fim: lastDayOfMonthStr(), page: 0 };
 
-  [empresasOptions, produtosOptions] = await Promise.all([loadEmpresasAtivas(), loadProdutosAtivos()]);
+  [empresasOptions, produtosOptions] = await Promise.all([loadEmpresasAtivas(), loadProdutosVendaveis()]);
 
   actionsEl.innerHTML = `<button type="button" class="btn btn--primary" id="btn-nova-entrada">+ Nova entrada de estoque</button>`;
   actionsEl.querySelector("#btn-nova-entrada").addEventListener("click", () => {
@@ -287,7 +287,7 @@ function openEntradaForm(onSaved) {
 
       showToast("Entrada de estoque registrada.");
       closeModal();
-      produtosOptions = await loadProdutosAtivos();
+      produtosOptions = await loadProdutosVendaveis();
       if (onSaved) onSaved();
     });
   });

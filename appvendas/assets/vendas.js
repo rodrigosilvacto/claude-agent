@@ -1,7 +1,7 @@
 import { supabase } from "./supabaseClient.js";
 import { showToast, openModal, confirmDialog, formatCurrency, formatDate, formatDateTime, escapeHtml, createSearchSelect, registerAutoRefresh, consumeVendaPrefill, withButtonLock, friendlyPgError } from "./app.js";
 import { isAdmin } from "./auth.js";
-import { loadClientesAtivos, loadProdutosAtivos, loadEmpresasAtivas, clienteSearchOptions, produtoSearchOptions, empresaSearchOptions, produtoMetaPrecoEstoque } from "./catalogo.js";
+import { loadClientesAtivos, loadProdutosVendaveis, loadEmpresasAtivas, clienteSearchOptions, produtoSearchOptions, empresaSearchOptions, produtoMetaPrecoEstoque } from "./catalogo.js";
 import { paytilesHtml, mountPaytiles, chamarCriarCheckoutStripe, mostrarModalStripe } from "./pagamento.js";
 
 let clientesOptions = [];
@@ -41,7 +41,7 @@ export async function render(view, actionsEl) {
   tabNova.addEventListener("click", () => activate("nova"));
   tabHistorico.addEventListener("click", () => activate("historico"));
 
-  [clientesOptions, produtosOptions, empresasOptions] = await Promise.all([loadClientesAtivos(), loadProdutosAtivos(), loadEmpresasAtivas()]);
+  [clientesOptions, produtosOptions, empresasOptions] = await Promise.all([loadClientesAtivos(), loadProdutosVendaveis(), loadEmpresasAtivas()]);
 
   activate("nova");
 }
@@ -169,6 +169,15 @@ function renderNovaVenda(content) {
     placeholder: "Buscar produto por nome ou SKU…",
     options: produtoSearchOptions(produtosOptions, { meta: produtoMetaPrecoEstoque }),
     allowClear: true,
+    // Fluxo "bipar e somar": ao escolher um produto (Enter numa sugestão
+    // filtrada — o que um leitor de código de barras faz sozinho — ou
+    // clique numa opção), adiciona na hora com a quantidade atual do campo
+    // ao lado, e o foco já volta pro campo de busca (ver fim de addItem)
+    // pronto pro próximo item, sem precisar clicar em "+ Adicionar" a cada
+    // item.
+    onChange: (value) => {
+      if (value) addItem();
+    },
   });
 
   if (prefill?.produtoId) {
@@ -184,7 +193,9 @@ function renderNovaVenda(content) {
       cartBody.innerHTML = cart.map((item, idx) => `
         <tr>
           <td>${escapeHtml(item.nome)}</td>
-          <td class="cell-num">${item.quantidade}</td>
+          <td class="cell-num">
+            <input type="number" class="input" data-qty="${idx}" min="1" step="1" value="${item.quantidade}" style="width: 64px; text-align:right; padding: 0.35rem 0.5rem; font-family: var(--font-mono);" />
+          </td>
           <td class="cell-num">${formatCurrency(item.preco_unitario)}</td>
           <td class="cell-num">${formatCurrency(item.quantidade * item.preco_unitario)}</td>
           <td class="cell-actions"><button type="button" class="icon-btn" data-remove="${idx}" aria-label="Remover">&times;</button></td>
@@ -193,6 +204,15 @@ function renderNovaVenda(content) {
       cartBody.querySelectorAll("[data-remove]").forEach((btn) => {
         btn.addEventListener("click", () => {
           cart.splice(Number(btn.dataset.remove), 1);
+          renderCart();
+        });
+      });
+      // Corrige a quantidade de um item já no carrinho sem precisar remover
+      // e readicionar — antes só dava pra ajustar assim.
+      cartBody.querySelectorAll("[data-qty]").forEach((input) => {
+        input.addEventListener("change", () => {
+          const idx = Number(input.dataset.qty);
+          cart[idx].quantidade = Math.max(Math.floor(Number(input.value || 0)), 1);
           renderCart();
         });
       });
@@ -290,7 +310,7 @@ function renderNovaVenda(content) {
 
     agendamentoOrigemId = null;
     cart = [];
-    produtosOptions = await loadProdutosAtivos();
+    produtosOptions = await loadProdutosVendaveis();
     renderNovaVenda(content);
   }
 
@@ -326,7 +346,7 @@ function renderNovaVenda(content) {
   // Atualiza silenciosamente os catálogos de cliente/produto (estoque, novos
   // cadastros) sem perder o carrinho em andamento nem fechar os campos de busca.
   registerAutoRefresh(async () => {
-    const [nextClientes, nextProdutos] = await Promise.all([loadClientesAtivos(), loadProdutosAtivos()]);
+    const [nextClientes, nextProdutos] = await Promise.all([loadClientesAtivos(), loadProdutosVendaveis()]);
     clientesOptions = nextClientes;
     produtosOptions = nextProdutos;
     clienteSelect.setOptions(clienteSearchOptions(clientesOptions));

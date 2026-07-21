@@ -30,7 +30,7 @@ async function loadUsuario(userId) {
   if (!userId) return null;
   const { data } = await supabase
     .from("usuarios")
-    .select("id, nome, login, role, ativo, empresa_id, empresa:empresas(nome_aplicacao, menus_habilitados)")
+    .select("id, nome, login, role, ativo, empresa_id, empresa:empresas(nome_aplicacao, menus_habilitados, horarios_agenda)")
     .eq("id", userId)
     .maybeSingle();
   return data || null;

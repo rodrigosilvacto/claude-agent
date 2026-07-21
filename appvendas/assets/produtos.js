@@ -21,6 +21,17 @@ async function loadFornecedorOptions(existingRow, empresaIdOverride) {
   return (data || []).map((f) => ({ value: f.id, label: f.nome }));
 }
 
+const TIPO_OPTIONS = [
+  { value: "produto", label: "Produto físico (controla estoque)" },
+  { value: "servico", label: "Serviço (curso/mensalidade — vendido em Matrículas)" },
+];
+
+function loadTipoOptions() {
+  return TIPO_OPTIONS;
+}
+
+const TIPO_LABEL = { produto: "Produto", servico: "Serviço" };
+
 export async function render(view, actionsEl) {
   await renderCadastro(view, actionsEl, {
     table: "produtos",
@@ -34,17 +45,23 @@ export async function render(view, actionsEl) {
       { key: "nome", label: "Nome" },
       { key: "sku", label: "SKU" },
       { key: "categoria", label: "Categoria" },
+      {
+        key: "tipo",
+        label: "Tipo",
+        render: (row) => `<span class="status status--${row.tipo === "servico" ? "matricula" : "venda"}">${TIPO_LABEL[row.tipo] || row.tipo}</span>`,
+      },
       { key: "preco", label: "Preço", align: "right", render: (row) => formatCurrency(row.preco) },
       {
         key: "estoque",
         label: "Estoque",
         align: "right",
         render: (row) => {
+          if (row.tipo === "servico") return '<span class="cell-muted">—</span>';
           const low = row.estoque <= row.estoque_minimo;
           return `<span style="${low ? "color: var(--danger); font-weight: 700;" : ""}">${row.estoque}</span>`;
         },
       },
-      { key: "fornecedor", label: "Fornecedor", render: (row) => escapeHtml(row.fornecedor?.nome || "—") },
+      { key: "fornecedor", label: "Fornecedor", sortable: false, render: (row) => escapeHtml(row.fornecedor?.nome || "—") },
       {
         key: "ativo",
         label: "Status",
@@ -53,6 +70,7 @@ export async function render(view, actionsEl) {
     ],
     fields: [
       { key: "nome", label: "Nome", required: true, full: true },
+      { key: "tipo", label: "Tipo", type: "select", required: true, default: "produto", full: true, optionsLoader: loadTipoOptions },
       { key: "sku", label: "SKU" },
       { key: "categoria", label: "Categoria" },
       { key: "preco", label: "Preço de venda", type: "number", step: "0.01", required: true, default: 0 },

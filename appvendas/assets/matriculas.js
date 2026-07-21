@@ -10,14 +10,18 @@
 // manualmente no balcão (ver "Registrar pagamento" no detalhe da matrícula).
 
 import { supabase } from "./supabaseClient.js";
-import { showToast, openModal, closeModal, confirmDialog, formatCurrency, formatDate, escapeHtml, createSearchSelect, registerAutoRefresh, withButtonLock, friendlyPgError } from "./app.js";
+import { showToast, openModal, closeModal, confirmDialog, formatCurrency, formatDate, escapeHtml, createSearchSelect, registerAutoRefresh, consumeMatriculaPrefill, withButtonLock, friendlyPgError } from "./app.js";
 import { isAdmin } from "./auth.js";
-import { loadClientesAtivos, loadProdutosAtivos, loadEmpresasAtivas, clienteSearchOptions, produtoSearchOptions, empresaSearchOptions, produtoMetaPreco } from "./catalogo.js";
+import { loadClientesAtivos, loadProdutosServicos, loadEmpresasAtivas, clienteSearchOptions, produtoSearchOptions, empresaSearchOptions, produtoMetaPreco } from "./catalogo.js";
 import { FORMAS_PAGAMENTO, paytilesHtml, mountPaytiles, chamarCriarCheckoutStripe, mostrarModalStripe } from "./pagamento.js";
 
 let clientesOptions = [];
 let produtosOptions = [];
 let empresasOptions = [];
+// Id do agendamento que originou a matrícula em andamento (fluxo Agenda →
+// Matrículas, via setMatriculaPrefill/consumeMatriculaPrefill em app.js).
+// Null numa matrícula avulsa.
+let agendamentoOrigemId = null;
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
@@ -25,6 +29,7 @@ function todayStr() {
 
 export async function render(view, actionsEl) {
   actionsEl.innerHTML = "";
+  agendamentoOrigemId = null;
 
   view.innerHTML = `
     <div class="toolbar" style="margin-bottom: 1.25rem;">
@@ -50,17 +55,24 @@ export async function render(view, actionsEl) {
   tabNova.addEventListener("click", () => activate("nova"));
   tabHistorico.addEventListener("click", () => activate("historico"));
 
-  [clientesOptions, produtosOptions, empresasOptions] = await Promise.all([loadClientesAtivos(), loadProdutosAtivos(), loadEmpresasAtivas()]);
+  [clientesOptions, produtosOptions, empresasOptions] = await Promise.all([loadClientesAtivos(), loadProdutosServicos(), loadEmpresasAtivas()]);
 
   activate("nova");
 }
 
 function renderNovaMatricula(content) {
+  const prefill = consumeMatriculaPrefill();
+  agendamentoOrigemId = prefill?.agendamentoId || null;
   const admin = isAdmin();
 
   content.innerHTML = `
     <div class="venda-layout">
       <div class="card card-section venda-itens">
+        ${prefill ? `
+          <div class="form-info">
+            Confirmando atendimento de ${escapeHtml(prefill.clienteNome || "cliente sem cadastro")} em ${formatDate(prefill.dataAgendamento)} às ${prefill.horario}. Revise os dados e finalize para registrar a matrícula.
+          </div>
+        ` : ""}
         ${admin ? `
           <div class="field">
             <label>Empresa<span class="field-required">*</span></label>
@@ -139,6 +151,12 @@ function renderNovaMatricula(content) {
     obsInput.focus();
   });
 
+  if (prefill) {
+    obsField.hidden = false;
+    obsToggle.hidden = true;
+    obsInput.value = `Matrícula referente ao atendimento agendado em ${formatDate(prefill.dataAgendamento)} às ${prefill.horario}.${prefill.observacoes ? ` Obs. do agendamento: ${prefill.observacoes}` : ""}`;
+  }
+
   const empresaSelect = admin
     ? createSearchSelect({
         container: content.querySelector('[data-mount="m-empresa"]'),
@@ -152,6 +170,7 @@ function renderNovaMatricula(content) {
     container: content.querySelector('[data-mount="m-cliente"]'),
     placeholder: "Buscar cliente por nome ou documento…",
     options: clienteSearchOptions(clientesOptions),
+    value: prefill?.clienteId || null,
     allowClear: false,
   });
 
@@ -159,9 +178,14 @@ function renderNovaMatricula(content) {
     container: content.querySelector('[data-mount="m-produto"]'),
     placeholder: "Buscar curso/serviço por nome ou SKU…",
     options: produtoSearchOptions(produtosOptions, { meta: produtoMetaPreco }),
+    value: prefill?.produtoId || null,
     allowClear: false,
     onChange: () => updateTotals(),
   });
+
+  if (prefill?.produtoId && !produtosOptions.some((p) => p.id === prefill.produtoId)) {
+    showToast("Curso/serviço do atendimento não encontrado no catálogo de Matrículas.", "error");
+  }
 
   // Duração (meses) é só um campo informativo — não entra nesta conta.
   // Quem define o valor é o preço do produto (curso/serviço), ver
@@ -247,9 +271,16 @@ function renderNovaMatricula(content) {
     await finalizarComSucesso();
   }));
 
-  async function finalizarComSucesso(mensagem = "Matrícula registrada com sucesso.") {
-    showToast(mensagem);
-    produtosOptions = await loadProdutosAtivos();
+  async function finalizarComSucesso(mensagemBase = "Matrícula registrada com sucesso.") {
+    if (agendamentoOrigemId) {
+      const { error: agError } = await supabase.from("agendamentos").update({ status: "atendido" }).eq("id", agendamentoOrigemId);
+      showToast(agError ? "Matrícula registrada, mas não foi possível confirmar o atendimento na agenda." : "Matrícula registrada e atendimento confirmado.", agError ? "error" : "success");
+    } else {
+      showToast(mensagemBase);
+    }
+
+    agendamentoOrigemId = null;
+    produtosOptions = await loadProdutosServicos();
     renderNovaMatricula(content);
   }
 
@@ -285,7 +316,7 @@ function renderNovaMatricula(content) {
   // sem perder o que já foi preenchido no formulário nem fechar os campos
   // de busca.
   registerAutoRefresh(async () => {
-    const [nextClientes, nextProdutos] = await Promise.all([loadClientesAtivos(), loadProdutosAtivos()]);
+    const [nextClientes, nextProdutos] = await Promise.all([loadClientesAtivos(), loadProdutosServicos()]);
     clientesOptions = nextClientes;
     produtosOptions = nextProdutos;
     clienteSelect.setOptions(clienteSearchOptions(clientesOptions));

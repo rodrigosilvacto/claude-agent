@@ -510,6 +510,14 @@ export function createSearchSelect({
     input.focus();
   });
 
+  // Sem isso, sair do campo com Tab (em vez de clicar fora ou apertar Esc)
+  // deixava o painel de sugestões aberto flutuando sobre o próximo campo —
+  // só fechava no clique seguinte em qualquer lugar da página. Não conflita
+  // com o clique numa opção: o mousedown do option/clearBtn já usa
+  // preventDefault (opção) ou é síncrono antes do reposicionamento do foco
+  // (clearBtn), então blur() não interrompe a escolha.
+  input.addEventListener("blur", closePanel);
+
   document.addEventListener("click", (e) => {
     if (!container.contains(e.target)) closePanel();
   });
@@ -583,12 +591,14 @@ export function stopAutoRefresh() {
   }
 }
 
-// ── Transferência Agenda → Vendas ──────────────────────────────────
+// ── Transferência Agenda → Vendas/Matrículas ────────────────────────
 //
-// Quando um atendimento é confirmado na Agenda, a tela de Vendas abre
+// Quando um atendimento é confirmado na Agenda, a tela de destino abre
 // pré-preenchida com os dados desse atendimento — o vínculo some assim
-// que é lido (uso único), então voltar a abrir "Nova venda" depois não
-// reaplica um atendimento antigo.
+// que é lido (uso único), então voltar a abrir a tela depois não reaplica
+// um atendimento antigo. Vendas ou Matrículas: agenda.js decide olhando o
+// tipo do produto do agendamento (produto físico → Vendas, serviço →
+// Matrículas).
 
 let pendingVendaOrigem = null;
 
@@ -600,6 +610,44 @@ export function consumeVendaPrefill() {
   const data = pendingVendaOrigem;
   pendingVendaOrigem = null;
   return data;
+}
+
+let pendingMatriculaOrigem = null;
+
+export function setMatriculaPrefill(data) {
+  pendingMatriculaOrigem = data;
+}
+
+export function consumeMatriculaPrefill() {
+  const data = pendingMatriculaOrigem;
+  pendingMatriculaOrigem = null;
+  return data;
+}
+
+// ── Exportação CSV ───────────────────────────────────────────────────
+//
+// Separador ";" (não ",") de propósito: no Excel em pt-BR a vírgula já é o
+// separador decimal, então um CSV com vírgula abre tudo numa coluna só —
+// ";" é o que o Excel BR espera nativamente, sem passar por "Texto para
+// colunas". O BOM no início faz o Excel reconhecer UTF-8 (senão acentuação
+// vem corrompida).
+
+function escapeCsvValue(value) {
+  const str = String(value ?? "");
+  return /[";\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+}
+
+export function exportCsv(filename, headers, rows) {
+  const linhas = [headers, ...rows].map((row) => row.map(escapeCsvValue).join(";"));
+  const blob = new Blob(["﻿" + linhas.join("\r\n")], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 // ── Formatação ──────────────────────────────────────────────────────

@@ -7,9 +7,9 @@
 // mesmo padrão de criar_venda/cancelar_venda.
 
 import { supabase } from "./supabaseClient.js";
-import { showToast, openModal, closeModal, confirmDialog, formatCurrency, formatDate, escapeHtml, createSearchSelect, registerAutoRefresh, withButtonLock, friendlyPgError } from "./app.js";
+import { showToast, openModal, closeModal, confirmDialog, formatCurrency, formatDate, escapeHtml, createSearchSelect, registerAutoRefresh, withButtonLock, friendlyPgError, exportCsv } from "./app.js";
 import { isAdmin, getCurrentEmpresaId } from "./auth.js";
-import { loadClientesAtivos, loadProdutosAtivos, loadEmpresasAtivas, clienteSearchOptions, produtoSearchOptions, empresaSearchOptions, produtoMetaPrecoEstoque } from "./catalogo.js";
+import { loadClientesAtivos, loadProdutosVendaveis, loadEmpresasAtivas, clienteSearchOptions, produtoSearchOptions, empresaSearchOptions, produtoMetaPrecoEstoque } from "./catalogo.js";
 import { openPagamentoParcelaForm } from "./matriculas.js";
 
 const FORMAS_PAGAMENTO = ["Dinheiro", "Pix", "Cartão de crédito", "Cartão de débito", "Boleto"];
@@ -50,11 +50,21 @@ export async function render(view, actionsEl) {
   // pra ver todo mundo que ainda deve, de qualquer vencimento).
   const state = { inicio: firstDayOfMonthStr(), fim: lastDayOfMonthPlusStr(1), page: 0, linhas: [], somentePendentes: false };
 
-  [clientesOptions, produtosOptions, empresasOptions] = await Promise.all([loadClientesAtivos(), loadProdutosAtivos(), loadEmpresasAtivas()]);
+  [clientesOptions, produtosOptions, empresasOptions] = await Promise.all([loadClientesAtivos(), loadProdutosVendaveis(), loadEmpresasAtivas()]);
 
-  actionsEl.innerHTML = `<button type="button" class="btn btn--primary" id="btn-novo-recebimento">+ Novo recebimento</button>`;
+  actionsEl.innerHTML = `
+    <button type="button" class="btn btn--ghost" id="btn-exportar-csv">Exportar CSV</button>
+    <button type="button" class="btn btn--primary" id="btn-novo-recebimento">+ Novo recebimento</button>
+  `;
   actionsEl.querySelector("#btn-novo-recebimento").addEventListener("click", () => {
     openRecebimentoForm(() => load(view, state, { silent: true }));
+  });
+  actionsEl.querySelector("#btn-exportar-csv").addEventListener("click", () => {
+    exportCsv(
+      `contas-a-receber_${state.inicio}_a_${state.fim}.csv`,
+      ["Data", "Origem", "Cliente", "Item(ns)", "Forma de pagamento", "Valor", "Status"],
+      state.linhas.map((l) => [l.data, ORIGEM_LABEL[l.origem]?.(l) || l.origem, l.cliente, l.itens, l.formaPagamento || "", l.valor.toFixed(2).replace(".", ","), (STATUS_META[l.status] || { label: l.status }).label]),
+    );
   });
 
   view.innerHTML = `
@@ -260,7 +270,7 @@ function renderContent(view, state) {
         return;
       }
       showToast("Recebimento cancelado e estoque devolvido.");
-      produtosOptions = await loadProdutosAtivos();
+      produtosOptions = await loadProdutosVendaveis();
       load(view, state);
     });
   });

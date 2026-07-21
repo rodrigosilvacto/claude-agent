@@ -27,7 +27,7 @@ function lastDayOfMonthStr() {
 }
 
 export async function render(view, actionsEl) {
-  const state = { inicio: firstDayOfMonthStr(), fim: lastDayOfMonthStr(), page: 0 };
+  const state = { inicio: firstDayOfMonthStr(), fim: lastDayOfMonthStr(), page: 0, somentePendentes: false };
 
   empresasOptions = await loadEmpresasAtivas();
 
@@ -50,17 +50,41 @@ export async function render(view, actionsEl) {
         <label>&nbsp;</label>
         <button type="button" class="btn btn--ghost" id="cp-filtrar">Filtrar</button>
       </div>
+      <div class="field" style="flex: 0 0 auto; margin-left: auto;">
+        <label>&nbsp;</label>
+        <label style="display:flex; align-items:center; gap:0.45rem; white-space:nowrap; font-weight:600; cursor:pointer;">
+          <input type="checkbox" id="cp-somente-pendentes" />
+          Só pendentes (todos os vencimentos)
+        </label>
+      </div>
     </div>
     <div id="cp-content"><div class="empty-state">Carregando…</div></div>
   `;
 
   const inicioInput = view.querySelector("#cp-inicio");
   const fimInput = view.querySelector("#cp-fim");
+  const filtrarBtn = view.querySelector("#cp-filtrar");
+  const somentePendentesInput = view.querySelector("#cp-somente-pendentes");
 
-  view.querySelector("#cp-filtrar").addEventListener("click", () => {
+  function syncFiltroDatasDisabled() {
+    const disabled = state.somentePendentes;
+    inicioInput.disabled = disabled;
+    fimInput.disabled = disabled;
+    filtrarBtn.disabled = disabled;
+  }
+  syncFiltroDatasDisabled();
+
+  filtrarBtn.addEventListener("click", () => {
     state.inicio = inicioInput.value || state.inicio;
     state.fim = fimInput.value || state.fim;
     state.page = 0;
+    load(view, state);
+  });
+
+  somentePendentesInput.addEventListener("change", () => {
+    state.somentePendentes = somentePendentesInput.checked;
+    state.page = 0;
+    syncFiltroDatasDisabled();
     load(view, state);
   });
 
@@ -69,15 +93,44 @@ export async function render(view, actionsEl) {
   registerAutoRefresh(() => load(view, state, { silent: true }), 20000);
 }
 
+const CONTA_SELECT = "id, descricao, valor, data_vencimento, data_pagamento, forma_pagamento, status, fornecedor:fornecedores(nome)";
+
+function withVencida(row) {
+  return { ...row, vencida: row.status === "pendente" && row.data_vencimento < todayStr() };
+}
+
 async function load(view, state, opts = {}) {
   const { silent = false } = opts;
   const content = view.querySelector("#cp-content");
   if (!silent) content.innerHTML = `<div class="empty-state">Carregando…</div>`;
 
+  // "Só pendentes" ignora o filtro de vencimento inteiro — lista fechada de
+  // "quem eu ainda devo", de qualquer data, mais próxima do vencimento primeiro.
+  if (state.somentePendentes) {
+    const { data, error } = await supabase
+      .from("contas_pagar")
+      .select(CONTA_SELECT)
+      .eq("status", "pendente")
+      .order("data_vencimento", { ascending: true })
+      .limit(2000);
+
+    if (error) {
+      content.innerHTML = `<div class="empty-state"><p class="empty-state__title">Não foi possível carregar as contas pendentes</p><p class="empty-state__hint">${escapeHtml(friendlyPgError(error))}</p></div>`;
+      return;
+    }
+
+    const linhas = (data || []).map(withVencida);
+    const totalPages = Math.max(1, Math.ceil(linhas.length / PAGE_SIZE));
+    state.page = Math.min(state.page, totalPages - 1);
+    const from = state.page * PAGE_SIZE;
+    renderContentPendentes(view, state, linhas.slice(from, from + PAGE_SIZE), linhas);
+    return;
+  }
+
   const from = state.page * PAGE_SIZE;
   const { data, error, count } = await supabase
     .from("contas_pagar")
-    .select("id, descricao, valor, data_vencimento, data_pagamento, forma_pagamento, status, fornecedor:fornecedores(nome)", { count: "exact" })
+    .select(CONTA_SELECT, { count: "exact" })
     .gte("data_vencimento", state.inicio)
     .lte("data_vencimento", state.fim)
     .order("data_vencimento", { ascending: true })
@@ -93,12 +146,12 @@ async function load(view, state, opts = {}) {
   // só as colunas necessárias para o resumo.
   const { data: todasDoPeriodo } = await supabase
     .from("contas_pagar")
-    .select("valor, status")
+    .select("valor, status, data_vencimento")
     .gte("data_vencimento", state.inicio)
     .lte("data_vencimento", state.fim)
     .limit(5000);
 
-  renderContent(view, state, data || [], count || 0, todasDoPeriodo || []);
+  renderContent(view, state, (data || []).map(withVencida), count || 0, (todasDoPeriodo || []).map(withVencida));
 }
 
 function renderContent(view, state, linhas, count, todasDoPeriodo) {
@@ -130,6 +183,42 @@ function renderContent(view, state, linhas, count, todasDoPeriodo) {
     </div>
   `;
 
+  wireAcoes(view, state, content);
+  wirePaginacao(view, state, content, totalPages, () => load(view, state));
+}
+
+function renderContentPendentes(view, state, linhasPagina, linhasTodas) {
+  const content = view.querySelector("#cp-content");
+  const vencidas = linhasTodas.filter((l) => l.vencida);
+  const totalPendente = linhasTodas.reduce((sum, l) => sum + Number(l.valor || 0), 0);
+  const totalVencido = vencidas.reduce((sum, l) => sum + Number(l.valor || 0), 0);
+  const totalPages = Math.max(1, Math.ceil(linhasTodas.length / PAGE_SIZE));
+
+  content.innerHTML = `
+    <div class="stat-grid">
+      ${statCard("Total a pagar (todos os vencimentos)", formatCurrency(totalPendente), "var(--danger)")}
+      ${statCard("Contas pendentes", linhasTodas.length, "var(--text-muted)")}
+      ${statCard("Contas em atraso", vencidas.length, vencidas.length > 0 ? "var(--danger)" : "var(--text-muted)")}
+      ${statCard("Valor em atraso", formatCurrency(totalVencido), vencidas.length > 0 ? "var(--danger)" : "var(--text-muted)")}
+    </div>
+    <div class="card card-section">
+      <p class="section-title">Contas pendentes (todos os vencimentos)</p>
+      ${renderTabela(linhasPagina, "Nenhuma conta pendente no momento.")}
+      ${totalPages > 1 ? `
+        <div class="pagination">
+          <button type="button" class="btn btn--ghost btn--sm" id="cp-page-prev" ${state.page === 0 ? "disabled" : ""}>‹ Anterior</button>
+          <span class="pagination__label">Página ${state.page + 1} de ${totalPages}</span>
+          <button type="button" class="btn btn--ghost btn--sm" id="cp-page-next" ${state.page >= totalPages - 1 ? "disabled" : ""}>Próxima ›</button>
+        </div>
+      ` : ""}
+    </div>
+  `;
+
+  wireAcoes(view, state, content);
+  wirePaginacao(view, state, content, totalPages, () => load(view, state));
+}
+
+function wireAcoes(view, state, content) {
   content.querySelectorAll("[data-pagar]").forEach((btn) => {
     btn.addEventListener("click", () => openPagamentoForm(btn.dataset.pagar, () => load(view, state, { silent: true })));
   });
@@ -147,17 +236,18 @@ function renderContent(view, state, linhas, count, todasDoPeriodo) {
       load(view, state, { silent: true });
     });
   });
+}
 
-  if (totalPages > 1) {
-    content.querySelector("#cp-page-prev").addEventListener("click", () => {
-      state.page = Math.max(0, state.page - 1);
-      load(view, state);
-    });
-    content.querySelector("#cp-page-next").addEventListener("click", () => {
-      state.page += 1;
-      load(view, state);
-    });
-  }
+function wirePaginacao(view, state, content, totalPages, reload) {
+  if (totalPages <= 1) return;
+  content.querySelector("#cp-page-prev").addEventListener("click", () => {
+    state.page = Math.max(0, state.page - 1);
+    reload();
+  });
+  content.querySelector("#cp-page-next").addEventListener("click", () => {
+    state.page += 1;
+    reload();
+  });
 }
 
 function statusLabel(status) {
@@ -173,9 +263,9 @@ function statCard(label, value, tagColor) {
   `;
 }
 
-function renderTabela(linhas) {
+function renderTabela(linhas, emptyMessage = "Nenhuma conta a pagar neste período.") {
   if (linhas.length === 0) {
-    return '<div class="empty-state" style="padding: 1.5rem;">Nenhuma conta a pagar neste período.</div>';
+    return `<div class="empty-state" style="padding: 1.5rem;">${escapeHtml(emptyMessage)}</div>`;
   }
   return `
     <div class="table-wrap">
@@ -184,13 +274,18 @@ function renderTabela(linhas) {
           <tr><th>Vencimento</th><th>Fornecedor</th><th>Descrição</th><th style="text-align:right">Valor</th><th>Status</th><th></th></tr>
         </thead>
         <tbody>
-          ${linhas.map((l) => `
+          ${linhas.map((l) => {
+            // Conta pendente com vencimento já passado ganha o selo
+            // "Atrasada" (vermelho) em vez do "Pendente" (amarelo) neutro.
+            const statusCls = l.vencida ? "atrasada" : l.status === "pago" ? "confirmada" : l.status === "cancelado" ? "cancelada" : "pendente";
+            const statusText = l.vencida ? "Atrasada" : statusLabel(l.status);
+            return `
             <tr>
               <td>${formatDate(l.data_vencimento)}</td>
               <td>${escapeHtml(l.fornecedor?.nome || "—")}</td>
               <td>${escapeHtml(l.descricao)}</td>
               <td class="cell-num">${formatCurrency(l.valor)}</td>
-              <td><span class="status status--${l.status === "pago" ? "confirmada" : l.status === "cancelado" ? "cancelada" : "pendente"}">${statusLabel(l.status)}</span></td>
+              <td><span class="status status--${statusCls}">${statusText}</span></td>
               <td class="cell-actions">
                 ${l.status === "pendente" ? `
                   <button type="button" class="btn btn--primary btn--sm" data-pagar="${l.id}">Registrar pagamento</button>
@@ -198,7 +293,8 @@ function renderTabela(linhas) {
                 ` : ""}
               </td>
             </tr>
-          `).join("")}
+          `;
+          }).join("")}
         </tbody>
       </table>
     </div>

@@ -37,7 +37,9 @@ function withEmpresaScope(rawConfig) {
     selectQuery: `${rawConfig.selectQuery || "*"}, empresa:empresas(nome_fantasia)`,
     columns: [
       ...rawConfig.columns,
-      { key: "empresa", label: "Empresa", render: (row) => escapeHtml(row.empresa?.nome_fantasia || "—") },
+      // Relação (empresas.nome_fantasia via join), não uma coluna própria de
+      // config.table — não dá pra ordenar direto com .order() no servidor.
+      { key: "empresa", label: "Empresa", sortable: false, render: (row) => escapeHtml(row.empresa?.nome_fantasia || "—") },
     ],
     fields: [
       ...rawConfig.fields,
@@ -99,7 +101,7 @@ async function loadRows(config, view, term, state) {
   }
 
   const from = state.page * PAGE_SIZE;
-  query = query.order(config.orderBy || "nome", { ascending: true }).range(from, from + PAGE_SIZE - 1);
+  query = query.order(state.key || config.orderBy || "nome", { ascending: state.asc }).range(from, from + PAGE_SIZE - 1);
 
   const { data, error, count } = await query;
   const card = view.querySelector(".card");
@@ -163,24 +165,13 @@ function renderPagination(config, view, term, state, count) {
   });
 }
 
-function sortData(data, config, state) {
-  const col = config.columns.find((c) => c.key === state.key);
-  const dir = state.asc ? 1 : -1;
-  return [...data].sort((a, b) => {
-    const va = col?.sortValue ? col.sortValue(a) : a[state.key];
-    const vb = col?.sortValue ? col.sortValue(b) : b[state.key];
-    if (va == null && vb == null) return 0;
-    if (va == null) return -1 * dir;
-    if (vb == null) return 1 * dir;
-    if (typeof va === "number" && typeof vb === "number") return (va - vb) * dir;
-    return String(va).localeCompare(String(vb), "pt-BR") * dir;
-  });
-}
-
+// Ordena no servidor (state.key/state.asc entram no .order() de loadRows) —
+// os dados já chegam prontos aqui, então renderTable só desenha. Antes disso
+// reordenava só a página de 50 linhas já em memória, o que dava resultado
+// enganoso a partir da página 2 (não trazia as linhas certas do banco,
+// só embaralhava as que por acaso já tinham vindo).
 function renderTable(config, view, card, data, state) {
-  const sorted = sortData(data, config, state);
-
-  const rows = sorted.map((row) => {
+  const rows = data.map((row) => {
     const railColor = "ativo" in row ? `var(${row.ativo ? "--success" : "--text-muted"})` : "transparent";
     return `
     <tr>
@@ -205,10 +196,12 @@ function renderTable(config, view, card, data, state) {
           <tr>
             ${config.columns.map((col) => `
               <th ${col.align === "right" ? 'style="text-align:right"' : ""}>
-                <button type="button" class="th-sort ${state.key === col.key ? "is-active" : ""}" data-sort="${col.key}">
-                  ${escapeHtml(col.label)}
-                  <span class="th-sort__caret">${state.key === col.key ? (state.asc ? "▲" : "▼") : "↕"}</span>
-                </button>
+                ${col.sortable === false ? escapeHtml(col.label) : `
+                  <button type="button" class="th-sort ${state.key === col.key ? "is-active" : ""}" data-sort="${col.key}">
+                    ${escapeHtml(col.label)}
+                    <span class="th-sort__caret">${state.key === col.key ? (state.asc ? "▲" : "▼") : "↕"}</span>
+                  </button>
+                `}
               </th>
             `).join("")}
             <th></th>
@@ -224,7 +217,8 @@ function renderTable(config, view, card, data, state) {
       const key = btn.dataset.sort;
       state.asc = state.key === key ? !state.asc : true;
       state.key = key;
-      renderTable(config, view, card, data, state);
+      state.page = 0;
+      loadRows(config, view, view.querySelector("#search-input").value.trim(), state);
     });
   });
 

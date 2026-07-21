@@ -1,76 +1,134 @@
+// BjjConnect — Relatórios > Visão geral: antes só olhava a tabela `vendas`
+// dos últimos 90 dias fixos. Agora tem filtro de período (como Financeiro/
+// Estoques) e o ranking de produtos/clientes soma as três origens de receita
+// do app — vendas confirmadas, parcelas de matrícula pagas e recebimentos
+// manuais — mesmo racional do Painel Início (home.js).
+
 import { supabase } from "./supabaseClient.js";
 import { formatCurrency, formatDate, escapeHtml, registerAutoRefresh } from "./app.js";
 
-// Buscar toda a tabela de vendas/itens a cada 20s não escala à medida que o
-// histórico cresce. Este painel é um resumo do momento, então em vez de
-// paginar (não faz sentido para um dashboard agregado) limitamos a janela a
-// um período recente — os rótulos abaixo deixam isso explícito.
-const RELATORIO_DIAS = 90;
+const RELATORIO_DIAS_PADRAO = 90;
 
-function cutoffDateStr() {
+function todayStr() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function diasAtrasStr(dias) {
   const d = new Date();
-  d.setDate(d.getDate() - RELATORIO_DIAS);
+  d.setDate(d.getDate() - dias);
   return d.toISOString().slice(0, 10);
 }
 
 export async function render(view, actionsEl) {
   actionsEl.innerHTML = "";
-  await load(view);
-  registerAutoRefresh(() => load(view, { silent: true }), 20000);
+  const state = { inicio: diasAtrasStr(RELATORIO_DIAS_PADRAO), fim: todayStr() };
+
+  view.innerHTML = `
+    <div class="toolbar financeiro-filtro">
+      <div class="field" style="flex: 0 0 160px;">
+        <label for="rel-inicio">De</label>
+        <input class="input" type="date" id="rel-inicio" value="${state.inicio}" />
+      </div>
+      <div class="field" style="flex: 0 0 160px;">
+        <label for="rel-fim">Até</label>
+        <input class="input" type="date" id="rel-fim" value="${state.fim}" />
+      </div>
+      <div class="field" style="flex: 0 0 auto;">
+        <label>&nbsp;</label>
+        <button type="button" class="btn btn--ghost" id="rel-filtrar">Filtrar</button>
+      </div>
+    </div>
+    <div id="rel-content"><div class="empty-state">Carregando relatórios…</div></div>
+  `;
+
+  view.querySelector("#rel-filtrar").addEventListener("click", () => {
+    state.inicio = view.querySelector("#rel-inicio").value || state.inicio;
+    state.fim = view.querySelector("#rel-fim").value || state.fim;
+    load(view, state);
+  });
+
+  await load(view, state);
+
+  registerAutoRefresh(() => load(view, state, { silent: true }), 20000);
 }
 
-async function load(view, opts = {}) {
+async function load(view, state, opts = {}) {
   const { silent = false } = opts;
-  if (!silent) view.innerHTML = `<div class="empty-state">Carregando relatórios…</div>`;
+  const content = view.querySelector("#rel-content");
+  if (!silent) content.innerHTML = `<div class="empty-state">Carregando relatórios…</div>`;
 
-  const cutoff = cutoffDateStr();
-  const [vendasRes, produtosRes, itensRes] = await Promise.all([
-    supabase.from("vendas").select("id, total, status, data_venda, cliente_id, cliente:clientes(nome)").gte("data_venda", cutoff),
-    supabase.from("produtos").select("id, nome, estoque, estoque_minimo").eq("ativo", true),
-    supabase.from("venda_itens").select("produto_id, quantidade, subtotal, produto:produtos(nome), venda:vendas!inner(status, data_venda)").gte("venda.data_venda", cutoff),
+  const [vendasRes, parcelasRes, recebimentosRes, produtosRes] = await Promise.all([
+    supabase
+      .from("vendas")
+      .select("id, numero, total, status, data_venda, cliente_id, cliente:clientes(nome), itens:venda_itens(produto_id, quantidade, subtotal, produto:produtos(nome))")
+      .gte("data_venda", state.inicio)
+      .lte("data_venda", state.fim),
+    supabase
+      .from("matricula_parcelas")
+      .select("id, numero_parcela, valor, data_pagamento, cliente_id, cliente:clientes(nome), matricula:matriculas(numero, produto:produtos(id, nome))")
+      .eq("status", "pago")
+      .gte("data_pagamento", state.inicio)
+      .lte("data_pagamento", state.fim),
+    supabase
+      .from("recebimentos")
+      .select("id, quantidade, valor, status, data_recebimento, cliente_id, cliente:clientes(nome), produto:produtos(id, nome)")
+      .gte("data_recebimento", state.inicio)
+      .lte("data_recebimento", state.fim),
+    supabase.from("produtos").select("id, nome, estoque, estoque_minimo, tipo").eq("ativo", true),
   ]);
 
-  if (vendasRes.error || produtosRes.error || itensRes.error) {
-    view.innerHTML = `<div class="empty-state"><p class="empty-state__title">Erro ao carregar relatórios</p><p class="empty-state__hint">${escapeHtml((vendasRes.error || produtosRes.error || itensRes.error).message)}</p></div>`;
+  const firstError = vendasRes.error || parcelasRes.error || recebimentosRes.error || produtosRes.error;
+  if (firstError) {
+    content.innerHTML = `<div class="empty-state"><p class="empty-state__title">Erro ao carregar relatórios</p><p class="empty-state__hint">${escapeHtml(firstError.message)}</p></div>`;
     return;
   }
 
   const vendasConfirmadas = (vendasRes.data || []).filter((v) => v.status === "confirmada");
-  const faturamento = vendasConfirmadas.reduce((sum, v) => sum + Number(v.total || 0), 0);
-  const ticketMedio = vendasConfirmadas.length ? faturamento / vendasConfirmadas.length : 0;
-  const estoqueBaixo = (produtosRes.data || []).filter((p) => p.estoque <= p.estoque_minimo);
+  const parcelasPagas = parcelasRes.data || [];
+  const recebimentosOk = (recebimentosRes.data || []).filter((r) => r.status !== "cancelado");
 
-  const topProdutos = aggregate(
-    (itensRes.data || []).filter((i) => i.venda?.status === "confirmada"),
-    (i) => i.produto_id,
-    (i) => i.produto?.nome || "Produto removido",
-    (i) => ({ quantidade: i.quantidade, total: Number(i.subtotal || 0) }),
-  );
+  const transacoes = vendasConfirmadas.length + parcelasPagas.length + recebimentosOk.length;
+  const faturamento = sum(vendasConfirmadas, "total") + sum(parcelasPagas, "valor") + sum(recebimentosOk, "valor");
+  const ticketMedio = transacoes ? faturamento / transacoes : 0;
+  // Serviço não tem estoque físico — nunca some com o produto (ver
+  // migration 0017), então nem entra na checagem de estoque baixo.
+  const estoqueBaixo = (produtosRes.data || []).filter((p) => p.tipo === "produto" && p.estoque <= p.estoque_minimo);
 
-  const topClientes = aggregate(
-    vendasConfirmadas,
-    (v) => v.cliente_id || "sem-cliente",
-    (v) => v.cliente?.nome || "Sem cliente identificado",
-    (v) => ({ quantidade: 1, total: Number(v.total || 0) }),
-  );
+  const topProdutos = aggregateProdutos([
+    ...vendaItemLinhas(vendasConfirmadas),
+    ...parcelaProdutoLinhas(parcelasPagas),
+    ...recebimentoProdutoLinhas(recebimentosOk),
+  ]);
 
-  view.innerHTML = `
-    <p class="record-count" style="margin: 0 0 1rem;">Vendas e itens considerados dos últimos ${RELATORIO_DIAS} dias. Estoque reflete a situação atual.</p>
+  const topClientes = aggregateClientes([
+    ...vendaClienteLinhas(vendasConfirmadas),
+    ...parcelaClienteLinhas(parcelasPagas),
+    ...recebimentoClienteLinhas(recebimentosOk),
+  ]);
+
+  const movimentacoes = [
+    ...vendasConfirmadas.map((v) => ({ data: v.data_venda, origem: `Venda #${v.numero}`, cliente: v.cliente?.nome || "Sem cliente", valor: Number(v.total || 0) })),
+    ...parcelasPagas.map((p) => ({ data: p.data_pagamento, origem: `Matrícula #${p.matricula?.numero ?? "?"} · parcela ${p.numero_parcela}`, cliente: p.cliente?.nome || "Sem cliente", valor: Number(p.valor || 0) })),
+    ...recebimentosOk.map((r) => ({ data: r.data_recebimento, origem: "Recebimento manual", cliente: r.cliente?.nome || "Sem cliente", valor: Number(r.valor || 0) })),
+  ].sort((a, b) => new Date(b.data) - new Date(a.data)).slice(0, 10);
+
+  content.innerHTML = `
+    <p class="record-count" style="margin: 0 0 1rem;">Vendas, matrículas e recebimentos manuais entre ${formatDate(state.inicio)} e ${formatDate(state.fim)}. Estoque reflete a situação atual.</p>
     <div class="stat-grid">
-      ${statCard(`Vendas confirmadas (${RELATORIO_DIAS} dias)`, vendasConfirmadas.length, "var(--accent)")}
-      ${statCard(`Faturamento (${RELATORIO_DIAS} dias)`, formatCurrency(faturamento), "var(--accent-deep)")}
-      ${statCard(`Ticket médio (${RELATORIO_DIAS} dias)`, formatCurrency(ticketMedio), "var(--amber)")}
-      ${statCard("Produtos com estoque baixo", estoqueBaixo.length, "var(--danger)")}
+      ${statCard("Transações no período", transacoes, "var(--accent)")}
+      ${statCard("Faturamento no período", formatCurrency(faturamento), "var(--accent-deep)")}
+      ${statCard("Ticket médio", formatCurrency(ticketMedio), "var(--amber)")}
+      ${statCard("Produtos com estoque baixo", estoqueBaixo.length, estoqueBaixo.length > 0 ? "var(--danger)" : "var(--text-muted)")}
     </div>
 
     <div class="report-grid">
       <div class="card card-section">
-        <p class="section-title">Produtos mais vendidos</p>
-        ${renderRankTable(topProdutos, "Produto", "Qtd.")}
+        <p class="section-title">Produtos e serviços mais vendidos</p>
+        ${renderRankTable(topProdutos, "Produto / serviço", "Qtd.")}
       </div>
       <div class="card card-section">
         <p class="section-title">Melhores clientes</p>
-        ${renderRankTable(topClientes, "Cliente", "Compras")}
+        ${renderRankTable(topClientes, "Cliente", "Transações")}
       </div>
     </div>
 
@@ -88,23 +146,81 @@ async function load(view, opts = {}) {
     </div>
 
     <div class="card card-section">
-      <p class="section-title">Últimas vendas</p>
-      ${renderUltimasVendas(vendasRes.data || [])}
+      <p class="section-title">Últimas movimentações</p>
+      ${renderMovimentacoes(movimentacoes)}
     </div>
   `;
 }
 
-function aggregate(rows, keyFn, labelFn, valueFn) {
-  const map = new Map();
-  for (const row of rows) {
-    const key = keyFn(row);
-    const value = valueFn(row);
-    if (!map.has(key)) map.set(key, { label: labelFn(row), quantidade: 0, total: 0 });
-    const entry = map.get(key);
-    entry.quantidade += value.quantidade;
-    entry.total += value.total;
+function sum(rows, key) {
+  return rows.reduce((total, row) => total + Number(row[key] || 0), 0);
+}
+
+// ── Ranking de produtos/serviços — mesmas 3 origens do Painel Início ────
+
+function vendaItemLinhas(vendas) {
+  const linhas = [];
+  for (const v of vendas) {
+    for (const it of v.itens || []) {
+      linhas.push({ produtoId: it.produto_id, produtoNome: it.produto?.nome || "Produto removido", quantidade: Number(it.quantidade || 0), valor: Number(it.subtotal || 0) });
+    }
   }
-  return Array.from(map.values()).sort((a, b) => b.total - a.total).slice(0, 5);
+  return linhas;
+}
+
+function parcelaProdutoLinhas(parcelas) {
+  return parcelas.map((p) => ({
+    produtoId: p.matricula?.produto?.id || `matricula-${p.matricula?.numero ?? "sem-produto"}`,
+    produtoNome: p.matricula?.produto?.nome || "Serviço (matrícula)",
+    quantidade: 1,
+    valor: Number(p.valor || 0),
+  }));
+}
+
+function recebimentoProdutoLinhas(recebimentos) {
+  return recebimentos.map((r) => ({
+    produtoId: r.produto?.id || "recebimento-sem-produto",
+    produtoNome: r.produto?.nome || "Produto",
+    quantidade: Number(r.quantidade || 0),
+    valor: Number(r.valor || 0),
+  }));
+}
+
+function aggregateProdutos(linhas) {
+  const map = new Map();
+  for (const l of linhas) {
+    if (!map.has(l.produtoId)) map.set(l.produtoId, { label: l.produtoNome, quantidade: 0, total: 0 });
+    const entry = map.get(l.produtoId);
+    entry.quantidade += l.quantidade;
+    entry.total += l.valor;
+  }
+  return Array.from(map.values()).sort((a, b) => b.total - a.total).slice(0, 6);
+}
+
+// ── Ranking de clientes — quantidade = nº de transações (venda, parcela
+// paga ou recebimento), não unidades ────────────────────────────────────
+
+function vendaClienteLinhas(vendas) {
+  return vendas.map((v) => ({ clienteId: v.cliente_id || "sem-cliente", clienteNome: v.cliente?.nome || "Sem cliente identificado", valor: Number(v.total || 0) }));
+}
+
+function parcelaClienteLinhas(parcelas) {
+  return parcelas.map((p) => ({ clienteId: p.cliente_id || "sem-cliente", clienteNome: p.cliente?.nome || "Sem cliente identificado", valor: Number(p.valor || 0) }));
+}
+
+function recebimentoClienteLinhas(recebimentos) {
+  return recebimentos.map((r) => ({ clienteId: r.cliente_id || "sem-cliente", clienteNome: r.cliente?.nome || "Sem cliente identificado", valor: Number(r.valor || 0) }));
+}
+
+function aggregateClientes(linhas) {
+  const map = new Map();
+  for (const l of linhas) {
+    if (!map.has(l.clienteId)) map.set(l.clienteId, { label: l.clienteNome, quantidade: 0, total: 0 });
+    const entry = map.get(l.clienteId);
+    entry.quantidade += 1;
+    entry.total += l.valor;
+  }
+  return Array.from(map.values()).sort((a, b) => b.total - a.total).slice(0, 6);
 }
 
 function statCard(label, value, tagColor) {
@@ -132,22 +248,21 @@ function renderRankTable(rows, labelHeader, qtyHeader) {
   `;
 }
 
-function renderUltimasVendas(vendas) {
-  const rows = [...vendas].sort((a, b) => new Date(b.data_venda) - new Date(a.data_venda)).slice(0, 8);
-  if (rows.length === 0) {
-    return '<div class="empty-state" style="padding: 1.5rem;">Nenhuma venda registrada ainda.</div>';
+function renderMovimentacoes(linhas) {
+  if (linhas.length === 0) {
+    return '<div class="empty-state" style="padding: 1.5rem;">Nenhuma movimentação neste período.</div>';
   }
   return `
     <div class="table-wrap">
       <table class="data-table">
-        <thead><tr><th>Data</th><th>Cliente</th><th style="text-align:right">Total</th><th>Status</th></tr></thead>
+        <thead><tr><th>Data</th><th>Origem</th><th>Cliente</th><th style="text-align:right">Valor</th></tr></thead>
         <tbody>
-          ${rows.map((v) => `
+          ${linhas.map((l) => `
             <tr>
-              <td>${formatDate(v.data_venda)}</td>
-              <td>${escapeHtml(v.cliente?.nome || "Sem cliente")}</td>
-              <td class="cell-num">${formatCurrency(v.total)}</td>
-              <td><span class="status status--${v.status}">${{ confirmada: "Confirmada", orcamento: "Orçamento", cancelada: "Cancelada" }[v.status] || v.status}</span></td>
+              <td>${formatDate(l.data)}</td>
+              <td>${escapeHtml(l.origem)}</td>
+              <td>${escapeHtml(l.cliente)}</td>
+              <td class="cell-num">${formatCurrency(l.valor)}</td>
             </tr>
           `).join("")}
         </tbody>
