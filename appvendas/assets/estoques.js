@@ -97,7 +97,7 @@ async function load(view, state, opts = {}) {
   // usado em Contas a Pagar/Receber para não recalcular sobre a página.
   const [{ data: todasDoPeriodo }, { data: produtosBaixos }] = await Promise.all([
     supabase.from("entradas_estoque").select("quantidade").gte("data_entrada", state.inicio).lte("data_entrada", state.fim).limit(5000),
-    supabase.from("produtos").select("estoque, estoque_minimo").eq("ativo", true).limit(5000),
+    supabase.from("produtos").select("estoque, estoque_minimo, tipo").eq("ativo", true).limit(5000),
   ]);
 
   renderContent(view, state, data || [], count || 0, todasDoPeriodo || [], produtosBaixos || []);
@@ -106,7 +106,9 @@ async function load(view, state, opts = {}) {
 function renderContent(view, state, linhas, count, todasDoPeriodo, produtos) {
   const content = view.querySelector("#es-content");
   const totalUnidades = todasDoPeriodo.reduce((sum, l) => sum + Number(l.quantidade || 0), 0);
-  const estoqueBaixo = produtos.filter((p) => Number(p.estoque) <= Number(p.estoque_minimo)).length;
+  // Serviço nunca recebe entrada de estoque — excluído do cálculo pelo
+  // mesmo motivo de home.js (senão fica "baixo" pra sempre).
+  const estoqueBaixo = produtos.filter((p) => p.tipo === "produto" && Number(p.estoque) <= Number(p.estoque_minimo)).length;
   const totalPages = Math.max(1, Math.ceil(count / PAGE_SIZE));
 
   content.innerHTML = `

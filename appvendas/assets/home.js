@@ -65,7 +65,7 @@ async function load(view, opts = {}) {
       .select("id, descricao, valor, data_pagamento, fornecedor:fornecedores(nome)")
       .eq("status", "pago")
       .gte("data_pagamento", mesInicio),
-    supabase.from("produtos").select("id, nome, estoque, estoque_minimo").eq("ativo", true),
+    supabase.from("produtos").select("id, nome, estoque, estoque_minimo, tipo").eq("ativo", true),
     empresaId
       ? supabase.from("empresas").select("nome_fantasia").eq("id", empresaId).maybeSingle()
       : Promise.resolve({ data: null, error: null }),
@@ -95,7 +95,10 @@ async function load(view, opts = {}) {
   const saidasMes = sum(contasPagas, "valor");
   const saldoMes = entradasMes - saidasMes;
 
-  const estoqueBaixo = (produtosRes.data || []).filter((p) => p.estoque <= p.estoque_minimo).sort((a, b) => a.estoque - b.estoque);
+  // Serviço (tipo="servico") nunca recebe entrada de estoque — comparar
+  // estoque/estoque_minimo pra ele só gera falso positivo permanente (ver
+  // migration 0017: estoque só existe de verdade pra tipo="produto").
+  const estoqueBaixo = (produtosRes.data || []).filter((p) => p.tipo === "produto" && p.estoque <= p.estoque_minimo).sort((a, b) => a.estoque - b.estoque);
   const nomeFantasia = empresaRes?.data?.nome_fantasia || "";
 
   const topProdutosServicos = aggregateProdutos([

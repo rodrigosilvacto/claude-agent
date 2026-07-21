@@ -25,7 +25,7 @@ const CONFIGURABLE_MENU_KEYS = ["clientes", "produtos", "fornecedores", "vendas"
 // ES modules carregar duas instâncias do módulo (hashchange listener e
 // boot() duplicados). Ver commit e4f8448 (correção original) e 3659424/
 // e75bd3a (reintrodução e reversão do bug).
-export const APP_BUILD = "2026-07-21 19:05 -03";
+export const APP_BUILD = "2026-07-21 20:15 -03";
 
 const ROUTES = {
   home: {
@@ -167,14 +167,17 @@ async function refreshPendencyBadges() {
   const hoje = new Date().toISOString().slice(0, 10);
   const [parcelasRes, produtosRes] = await Promise.all([
     supabase.from("matricula_parcelas").select("id", { count: "exact", head: true }).eq("status", "pendente").lt("data_vencimento", hoje),
-    supabase.from("produtos").select("estoque, estoque_minimo").eq("ativo", true),
+    supabase.from("produtos").select("estoque, estoque_minimo, tipo").eq("ativo", true),
   ]);
 
   if (parcelasRes.error) console.error("Falha ao atualizar badge de contas a receber:", parcelasRes.error);
   else setNavBadge(navBadgeContasReceber, parcelasRes.count || 0);
 
   if (produtosRes.error) console.error("Falha ao atualizar badge de estoque baixo:", produtosRes.error);
-  else setNavBadge(navBadgeEstoques, (produtosRes.data || []).filter((p) => p.estoque <= p.estoque_minimo).length);
+  // Serviço (tipo="servico") nunca recebe entrada de estoque — mesma
+  // exclusão de home.js/estoques.js/relatorios.js, senão o badge fica
+  // aceso pra sempre por causa de um curso/mensalidade.
+  else setNavBadge(navBadgeEstoques, (produtosRes.data || []).filter((p) => p.tipo === "produto" && p.estoque <= p.estoque_minimo).length);
 }
 
 let badgeRefreshTimer = null;

@@ -235,6 +235,42 @@ processado para não ficar reprocessando.
   independente do status agendado/atendido — que hoje só muda quando o
   atendimento vira venda ou matrícula.
 
+> **"Estoque baixo" contava serviço (bug corrigido):** as telas de Início,
+> Estoques e o badge do menu comparavam `estoque <= estoque_minimo` para
+> **todos** os produtos ativos, sem excluir `tipo = 'servico'` (curso/
+> mensalidade — nunca recebe entrada de estoque, ver migration 0017). Um
+> serviço com `estoque` zerado por padrão ficava marcado como "baixo" pra
+> sempre. `relatorios.js` já filtrava certo (`tipo === "produto"`); as
+> outras três telas foram corrigidas para o mesmo filtro.
+
+### Agendamento público (`appvendas/agendamento-publico.html`)
+
+Segunda via de marcar um atendimento na Agenda, além de um funcionário
+criar direto na tela interna: um link público (sem login) que qualquer
+pessoa com acesso pode usar para agendar um **serviço** (curso/mensalidade
+— nunca produto físico) sozinha. Botão "Link de agendamento" na tela
+Agenda abre o link numa nova aba (e tenta copiar pra área de transferência).
+
+- `appvendas/agendamento-publico.html` / `appvendas/assets/agendamento-publico.js`
+  — mesmo padrão de `pre-cadastro.html`: HTML/JS isolado, sem `app.js`/
+  `auth.js`, com honeypot + tempo mínimo de preenchimento contra spam.
+- **Banco (migration `0022_agendamento_publico.sql`):** três RPCs
+  `security definer` liberadas para `anon` — `agenda_publica_info`
+  (nome da empresa, grade de horários, catálogo de serviços),
+  `horarios_ocupados_publico` (pra desabilitar horário já tomado antes de
+  enviar) e `agendar_publico` (cria o agendamento e, se o CPF/CNPJ ainda
+  não existir na base, um cliente novo com `status_cadastro = 'pendente'`
+  — mesmo fluxo de revisão do pré-cadastro). Valida servidor-side que o
+  horário está na grade configurada da empresa e que o produto é
+  `tipo = 'servico'`; limite de 30 agendamentos por empresa a cada 10
+  minutos contra abuso (mesmo racional de `pre_cadastro_cliente`, mas mais
+  crítico aqui — spam nesta rota ocupa horários de verdade, não só cria
+  cadastros pendentes).
+- Testado manualmente ponta a ponta como papel `anon` num Postgres local:
+  código de empresa inválido, produto físico rejeitado, conflito de
+  horário rejeitado, horário fora da grade rejeitado, e reagendar com o
+  mesmo documento reaproveita o cliente em vez de duplicar.
+
 ### Cache do `app.js` — NÃO adicione `?v=N` no `<script>` de entrada
 
 Ao contrário do Reports Panel (ver seção seguinte), o `<script>` de entrada

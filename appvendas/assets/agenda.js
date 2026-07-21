@@ -8,7 +8,7 @@
 
 import { supabase } from "./supabaseClient.js";
 import { showToast, openModal, closeModal, confirmDialog, escapeHtml, createSearchSelect, registerAutoRefresh, setVendaPrefill, setMatriculaPrefill, withButtonLock, friendlyPgError } from "./app.js";
-import { isAdmin, getCurrentUsuario } from "./auth.js";
+import { isAdmin, getCurrentUsuario, getCurrentEmpresaId } from "./auth.js";
 import { loadClientesAtivos, loadProdutosAtivos, loadEmpresasAtivas, clienteSearchOptions, produtoSearchOptions, empresaSearchOptions } from "./catalogo.js";
 
 // Grade padrão de horários — usada quando a empresa do usuário logado não
@@ -112,6 +112,7 @@ export async function render(content) {
           <button type="button" class="segmented__btn" data-view="semana" role="radio">Semana</button>
           <button type="button" class="segmented__btn" data-view="mes" role="radio">Mês</button>
         </div>
+        <button type="button" class="btn btn--ghost" id="ag-link-publico">Link de agendamento</button>
         <button type="button" class="btn btn--primary" id="ag-novo">+ Novo agendamento</button>
       </div>
       <div class="agenda__body" id="ag-body"></div>
@@ -187,6 +188,31 @@ export async function render(content) {
 
   content.querySelector("#ag-novo").addEventListener("click", () => {
     openAgendamentoForm({ data: toKey(state.anchor) }, draw);
+  });
+
+  // Segunda via de agendar, além de um funcionário criar direto aqui:
+  // um link público (sem login) que qualquer pessoa com acesso pode usar
+  // pra marcar um serviço sozinha — ver agendamento-publico.html/
+  // migration 0022. Mesmo padrão de "Copiar link de pré-cadastro" em
+  // clientes.js: sem empresa_id (admin global), o link cai no fallback
+  // MATRIZ da RPC — mesma regra de lá, não uma escolha nova.
+  content.querySelector("#ag-link-publico").addEventListener("click", async () => {
+    const basePath = window.location.pathname.replace(/[^/]*$/, "");
+    let query = "";
+    const empresaId = getCurrentEmpresaId();
+    if (empresaId) {
+      const { data: empresa, error } = await supabase.from("empresas").select("codigo").eq("id", empresaId).maybeSingle();
+      if (error) showToast(friendlyPgError(error), "error");
+      if (empresa?.codigo) query = `?empresa=${encodeURIComponent(empresa.codigo)}`;
+    }
+    const url = `${window.location.origin}${basePath}agendamento-publico.html${query}`;
+    window.open(url, "_blank", "noopener");
+    try {
+      await navigator.clipboard.writeText(url);
+      showToast("Link de agendamento aberto em nova aba (e copiado).");
+    } catch {
+      showToast("Link de agendamento aberto em nova aba.");
+    }
   });
 
   setView("dia");
