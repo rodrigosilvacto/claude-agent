@@ -4,7 +4,7 @@
 // baixa de estoque — pagar um fornecedor não movimenta produto.
 
 import { supabase } from "./supabaseClient.js";
-import { showToast, openModal, closeModal, confirmDialog, formatCurrency, formatDate, escapeHtml, createSearchSelect, registerAutoRefresh, withButtonLock, friendlyPgError } from "./app.js";
+import { showToast, openModal, closeModal, confirmDialog, formatCurrency, formatDate, escapeHtml, createSearchSelect, registerAutoRefresh, withButtonLock, friendlyPgError, exportCsv } from "./app.js";
 import { isAdmin, getCurrentEmpresaId } from "./auth.js";
 import { loadEmpresasAtivas, loadFornecedoresPorEmpresa, empresaSearchOptions, fornecedorSearchOptions } from "./catalogo.js";
 
@@ -31,9 +31,23 @@ export async function render(view, actionsEl) {
 
   empresasOptions = await loadEmpresasAtivas();
 
-  actionsEl.innerHTML = `<button type="button" class="btn btn--primary" id="btn-nova-conta">+ Nova conta a pagar</button>`;
+  actionsEl.innerHTML = `
+    <button type="button" class="btn btn--ghost" id="btn-exportar-csv">Exportar CSV</button>
+    <button type="button" class="btn btn--primary" id="btn-nova-conta">+ Nova conta a pagar</button>
+  `;
   actionsEl.querySelector("#btn-nova-conta").addEventListener("click", () => {
     openContaForm(() => load(view, state, { silent: true }));
+  });
+  actionsEl.querySelector("#btn-exportar-csv").addEventListener("click", () => {
+    const linhas = state.linhasCompletas || [];
+    const nomeArquivo = state.somentePendentes
+      ? "contas-a-pagar_pendentes.csv"
+      : `contas-a-pagar_${state.inicio}_a_${state.fim}.csv`;
+    exportCsv(
+      nomeArquivo,
+      ["Vencimento", "Fornecedor", "Descrição", "Valor", "Forma de pagamento", "Status"],
+      linhas.map((l) => [l.data_vencimento, l.fornecedor?.nome || "", l.descricao, Number(l.valor || 0).toFixed(2).replace(".", ","), l.forma_pagamento || "", l.vencida ? "Atrasada" : statusLabel(l.status)]),
+    );
   });
 
   view.innerHTML = `
@@ -120,6 +134,7 @@ async function load(view, state, opts = {}) {
     }
 
     const linhas = (data || []).map(withVencida);
+    state.linhasCompletas = linhas;
     const totalPages = Math.max(1, Math.ceil(linhas.length / PAGE_SIZE));
     state.page = Math.min(state.page, totalPages - 1);
     const from = state.page * PAGE_SIZE;
@@ -141,17 +156,18 @@ async function load(view, state, opts = {}) {
     return;
   }
 
-  // Totais do período somam todas as contas que casam com o filtro, não só
-  // a página em tela — por isso uma segunda consulta sem range(), pedindo
-  // só as colunas necessárias para o resumo.
+  // Totais (e a exportação CSV) somam todas as contas que casam com o
+  // filtro, não só a página em tela — por isso uma segunda consulta sem
+  // range().
   const { data: todasDoPeriodo } = await supabase
     .from("contas_pagar")
-    .select("valor, status, data_vencimento")
+    .select(CONTA_SELECT)
     .gte("data_vencimento", state.inicio)
     .lte("data_vencimento", state.fim)
     .limit(5000);
 
-  renderContent(view, state, (data || []).map(withVencida), count || 0, (todasDoPeriodo || []).map(withVencida));
+  state.linhasCompletas = (todasDoPeriodo || []).map(withVencida);
+  renderContent(view, state, (data || []).map(withVencida), count || 0, state.linhasCompletas);
 }
 
 function renderContent(view, state, linhas, count, todasDoPeriodo) {

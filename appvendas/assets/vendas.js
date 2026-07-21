@@ -1,5 +1,5 @@
 import { supabase } from "./supabaseClient.js";
-import { showToast, openModal, confirmDialog, formatCurrency, formatDate, formatDateTime, escapeHtml, createSearchSelect, registerAutoRefresh, consumeVendaPrefill, withButtonLock, friendlyPgError } from "./app.js";
+import { showToast, openModal, confirmDialog, formatCurrency, formatDate, formatDateTime, escapeHtml, createSearchSelect, registerAutoRefresh, consumeVendaPrefill, withButtonLock, friendlyPgError, exportCsv } from "./app.js";
 import { isAdmin } from "./auth.js";
 import { loadClientesAtivos, loadProdutosVendaveis, loadEmpresasAtivas, clienteSearchOptions, produtoSearchOptions, empresaSearchOptions, produtoMetaPrecoEstoque } from "./catalogo.js";
 import { paytilesHtml, mountPaytiles, chamarCriarCheckoutStripe, mostrarModalStripe } from "./pagamento.js";
@@ -34,8 +34,14 @@ export async function render(view, actionsEl) {
   function activate(tab) {
     tabNova.className = tab === "nova" ? "btn btn--primary" : "btn btn--ghost";
     tabHistorico.className = tab === "historico" ? "btn btn--primary" : "btn btn--ghost";
-    if (tab === "nova") renderNovaVenda(content);
-    else renderHistorico(content);
+    if (tab === "nova") {
+      actionsEl.innerHTML = "";
+      renderNovaVenda(content);
+    } else {
+      actionsEl.innerHTML = `<button type="button" class="btn btn--ghost" id="btn-exportar-csv">Exportar CSV</button>`;
+      actionsEl.querySelector("#btn-exportar-csv").addEventListener("click", exportarHistoricoCsv);
+      renderHistorico(content);
+    }
   }
 
   tabNova.addEventListener("click", () => activate("nova"));
@@ -355,6 +361,30 @@ function renderNovaVenda(content) {
 }
 
 const HISTORICO_PAGE_SIZE = 50;
+// Teto de segurança pra exportação, mesmo padrão de FETCH_CAP em
+// financeiro.js/contas-pagar.js — histórico de vendas não tem filtro de
+// período (é uma lista só paginada por número), então sem isso "Exportar
+// CSV" poderia tentar puxar anos de vendas de uma vez.
+const EXPORT_CAP = 5000;
+
+async function exportarHistoricoCsv() {
+  const { data, error } = await supabase
+    .from("vendas")
+    .select("numero, data_venda, status, total, forma_pagamento, cliente:clientes(nome)")
+    .order("numero", { ascending: false })
+    .limit(EXPORT_CAP);
+
+  if (error) {
+    showToast(friendlyPgError(error), "error");
+    return;
+  }
+
+  exportCsv(
+    "vendas.csv",
+    ["Nº", "Data", "Cliente", "Forma de pagamento", "Total", "Status"],
+    (data || []).map((v) => [v.numero, v.data_venda, v.cliente?.nome || "", v.forma_pagamento || "", Number(v.total || 0).toFixed(2).replace(".", ","), statusLabel(v.status)]),
+  );
+}
 
 async function renderHistorico(content) {
   content.innerHTML = `<div class="card"><div class="table-wrap" id="vendas-table">${'<div class="empty-state">Carregando…</div>'}</div></div><div id="vendas-pagination"></div>`;

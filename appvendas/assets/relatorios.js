@@ -5,7 +5,7 @@
 // manuais — mesmo racional do Painel Início (home.js).
 
 import { supabase } from "./supabaseClient.js";
-import { formatCurrency, formatDate, escapeHtml, registerAutoRefresh } from "./app.js";
+import { formatCurrency, formatDate, escapeHtml, registerAutoRefresh, exportCsv } from "./app.js";
 
 const RELATORIO_DIAS_PADRAO = 90;
 
@@ -20,8 +20,16 @@ function diasAtrasStr(dias) {
 }
 
 export async function render(view, actionsEl) {
-  actionsEl.innerHTML = "";
-  const state = { inicio: diasAtrasStr(RELATORIO_DIAS_PADRAO), fim: todayStr() };
+  const state = { inicio: diasAtrasStr(RELATORIO_DIAS_PADRAO), fim: todayStr(), movimentacoesTodas: [] };
+
+  actionsEl.innerHTML = `<button type="button" class="btn btn--ghost" id="btn-exportar-csv">Exportar CSV</button>`;
+  actionsEl.querySelector("#btn-exportar-csv").addEventListener("click", () => {
+    exportCsv(
+      `relatorio_${state.inicio}_a_${state.fim}.csv`,
+      ["Data", "Origem", "Cliente", "Valor"],
+      state.movimentacoesTodas.map((l) => [l.data, l.origem, l.cliente, l.valor.toFixed(2).replace(".", ",")]),
+    );
+  });
 
   view.innerHTML = `
     <div class="toolbar financeiro-filtro">
@@ -106,11 +114,15 @@ async function load(view, state, opts = {}) {
     ...recebimentoClienteLinhas(recebimentosOk),
   ]);
 
-  const movimentacoes = [
+  // Exportação CSV usa a lista inteira do período — só a tela mostra as 10
+  // mais recentes.
+  const movimentacoesTodas = [
     ...vendasConfirmadas.map((v) => ({ data: v.data_venda, origem: `Venda #${v.numero}`, cliente: v.cliente?.nome || "Sem cliente", valor: Number(v.total || 0) })),
     ...parcelasPagas.map((p) => ({ data: p.data_pagamento, origem: `Matrícula #${p.matricula?.numero ?? "?"} · parcela ${p.numero_parcela}`, cliente: p.cliente?.nome || "Sem cliente", valor: Number(p.valor || 0) })),
     ...recebimentosOk.map((r) => ({ data: r.data_recebimento, origem: "Recebimento manual", cliente: r.cliente?.nome || "Sem cliente", valor: Number(r.valor || 0) })),
-  ].sort((a, b) => new Date(b.data) - new Date(a.data)).slice(0, 10);
+  ].sort((a, b) => new Date(b.data) - new Date(a.data));
+  state.movimentacoesTodas = movimentacoesTodas;
+  const movimentacoes = movimentacoesTodas.slice(0, 10);
 
   content.innerHTML = `
     <p class="record-count" style="margin: 0 0 1rem;">Vendas, matrículas e recebimentos manuais entre ${formatDate(state.inicio)} e ${formatDate(state.fim)}. Estoque reflete a situação atual.</p>

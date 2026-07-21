@@ -61,10 +61,15 @@ function horaAtual() {
   return `${String(new Date().getHours()).padStart(2, "0")}:00`;
 }
 
+// Cancelado não é excluído (ver migration 0019 — o slot fica livre pro
+// índice parcial, mas a linha continua no banco como rastro), só some da
+// grade: nem o calendário nem o resumo por dia mostram agendamento
+// cancelado, então essas duas consultas sempre excluem esse status.
 async function loadAgendamentos(startKey, endKey) {
   const { data, error } = await supabase
     .from("agendamentos")
     .select("id, data_agendamento, horario, status, observacoes, cliente_id, produto_id, empresa_id, cliente:clientes(nome), produto:produtos(nome, tipo)")
+    .neq("status", "cancelado")
     .gte("data_agendamento", startKey)
     .lte("data_agendamento", endKey)
     .order("horario", { ascending: true });
@@ -73,7 +78,12 @@ async function loadAgendamentos(startKey, endKey) {
 }
 
 async function loadResumoPorDia(startKey, endKey) {
-  const { data, error } = await supabase.from("agendamentos").select("data_agendamento, status").gte("data_agendamento", startKey).lte("data_agendamento", endKey);
+  const { data, error } = await supabase
+    .from("agendamentos")
+    .select("data_agendamento, status")
+    .neq("status", "cancelado")
+    .gte("data_agendamento", startKey)
+    .lte("data_agendamento", endKey);
   if (error) throw error;
   const map = new Map();
   for (const row of data || []) {
@@ -277,16 +287,19 @@ async function renderDia(body, anchor, onChange) {
     });
   });
 
+  // Cancelar em vez de excluir de fato — mantém o registro no banco como
+  // rastro de quem cancelou o quê (ver migration 0019); o horário libera pro
+  // índice parcial e some da grade do mesmo jeito que uma exclusão faria.
   body.querySelectorAll("[data-excluir]").forEach((btn) => {
     btn.addEventListener("click", async () => {
-      const ok = await confirmDialog("Excluir este agendamento?", { confirmLabel: "Excluir" });
+      const ok = await confirmDialog("Cancelar este agendamento?", { confirmLabel: "Cancelar agendamento" });
       if (!ok) return;
-      const { error } = await supabase.from("agendamentos").delete().eq("id", btn.dataset.excluir);
+      const { error } = await supabase.from("agendamentos").update({ status: "cancelado" }).eq("id", btn.dataset.excluir);
       if (error) {
         showToast(friendlyPgError(error), "error");
         return;
       }
-      showToast("Agendamento excluído.");
+      showToast("Agendamento cancelado.");
       onChange();
     });
   });
@@ -326,7 +339,7 @@ function slotHtml(hora, ag, { isAgora = false, isPassado = false } = {}) {
         ${atendido ? "" : `
           <button type="button" class="btn btn--primary btn--sm" data-atendido="${ag.id}">Atendido</button>
           <button type="button" class="btn btn--ghost btn--sm" data-editar="${ag.id}">Editar</button>
-          <button type="button" class="btn btn--danger btn--sm" data-excluir="${ag.id}">Excluir</button>
+          <button type="button" class="btn btn--danger btn--sm" data-excluir="${ag.id}">Cancelar</button>
         `}
       </div>
     </div>
@@ -523,7 +536,7 @@ async function openAgendamentoForm({ id = null, clienteId = null, produtoId = nu
     // empresa tem sua própria agenda independente. Para quem não é admin, a
     // RLS já restringe a consulta à própria empresa.
     if (dataInput.value && !(admin && !empresaSelect.getValue())) {
-      let query = supabase.from("agendamentos").select("horario").eq("data_agendamento", dataInput.value);
+      let query = supabase.from("agendamentos").select("horario").eq("data_agendamento", dataInput.value).neq("status", "cancelado");
       if (admin) query = query.eq("empresa_id", empresaSelect.getValue());
       if (editando) query = query.neq("id", id);
       const { data: rows } = await query;
