@@ -170,19 +170,25 @@ function renderNovaVenda(content) {
     allowClear: true,
   });
 
+  const qtdInput = content.querySelector("#v-qtd");
+
   const produtoSelect = createSearchSelect({
     container: content.querySelector('[data-mount="v-produto"]'),
     placeholder: "Buscar produto por nome ou SKU…",
     options: produtoSearchOptions(produtosOptions, { meta: produtoMetaPrecoEstoque }),
     allowClear: true,
-    // Fluxo "bipar e somar": ao escolher um produto (Enter numa sugestão
-    // filtrada — o que um leitor de código de barras faz sozinho — ou
-    // clique numa opção), adiciona na hora com a quantidade atual do campo
-    // ao lado, e o foco já volta pro campo de busca (ver fim de addItem)
-    // pronto pro próximo item, sem precisar clicar em "+ Adicionar" a cada
-    // item.
+    // Ao escolher um produto (clique numa opção ou Enter numa sugestão
+    // filtrada — o que um leitor de código de barras faz sozinho), NÃO
+    // adiciona direto no carrinho: o foco pula pro campo de Quantidade, já
+    // com o valor "1" selecionado, pronto pra digitar por cima. O usuário
+    // confirma com Enter ali (keydown mais abaixo) ou clicando em
+    // "+ Adicionar". Assim o item já entra na grid com a quantidade certa,
+    // em vez de precisar corrigir depois direto na tabela.
     onChange: (value) => {
-      if (value) addItem();
+      if (!value) return;
+      qtdInput.value = 1;
+      qtdInput.focus();
+      qtdInput.select();
     },
   });
 
@@ -234,8 +240,6 @@ function renderNovaVenda(content) {
   }
 
   descontoInput.addEventListener("input", updateTotals);
-
-  const qtdInput = content.querySelector("#v-qtd");
 
   function addItem() {
     const produtoId = produtoSelect.getValue();
