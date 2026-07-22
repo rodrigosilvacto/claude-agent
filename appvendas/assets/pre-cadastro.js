@@ -1,5 +1,5 @@
 // Página pública de pré-cadastro — sem login, sem app-shell. Roda isolada
-// de app.js/auth.js de propósito: é a única tela do BjjConnect pensada para
+// de app.js/auth.js de propósito: é a única tela do ERPConnect pensada para
 // ser aberta por alguém que não é da equipe.
 
 import { supabase } from "./supabaseClient.js";

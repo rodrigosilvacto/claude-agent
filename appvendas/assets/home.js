@@ -1,4 +1,4 @@
-// BjjConnect — Início > Painel do dia: visão financeira consolidada da
+// ERPConnect — Início > Painel do dia: visão financeira consolidada da
 // empresa. Antes só olhava a tabela `vendas`; agora soma toda entrada
 // (vendas confirmadas, parcelas de matrícula pagas, recebimentos manuais) e
 // toda saída (contas a pagar já pagas), e cruza produtos + serviços vendidos

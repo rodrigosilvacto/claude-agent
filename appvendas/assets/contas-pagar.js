@@ -1,4 +1,4 @@
-// BjjConnect — Financeiro > Contas a Pagar: lançamentos manuais de valores
+// ERPConnect — Financeiro > Contas a Pagar: lançamentos manuais de valores
 // devidos a fornecedores num período, com registro de pagamento e
 // cancelamento. Mesmo padrão de Contas a Receber (financeiro.js), mas sem
 // baixa de estoque — pagar um fornecedor não movimenta produto.

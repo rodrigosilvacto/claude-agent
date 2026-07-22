@@ -1,4 +1,4 @@
-// BjjConnect — forma de pagamento e fluxo Stripe compartilhados entre Loja
+// ERPConnect — forma de pagamento e fluxo Stripe compartilhados entre Loja
 // (vendas) e Matrículas: os mesmos "tiles" com ícone (Dinheiro/Pix/Cartão.../
 // Stripe) e o mesmo fluxo de Checkout Session (QR/link + polling até o
 // webhook confirmar). Extraído de vendas.js pra Matrículas reusar sem

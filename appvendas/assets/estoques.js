@@ -1,4 +1,4 @@
-// BjjConnect — Movimentações > Estoques: entrada de estoque como lançamento
+// ERPConnect — Movimentações > Estoques: entrada de estoque como lançamento
 // auditável (produto + quantidade + data), via RPC registrar_entrada_estoque.
 // Substitui o antigo fluxo de editar "Estoque atual" à mão no cadastro do
 // Produto — aqui fica um histórico de quando e quanto entrou de cada item,

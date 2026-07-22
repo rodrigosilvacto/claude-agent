@@ -1,4 +1,4 @@
-// BjjConnect — Movimentações > Matrículas: contratação de um curso/serviço
+// ERPConnect — Movimentações > Matrículas: contratação de um curso/serviço
 // por um cliente, com parcelamento. Mesma UX de pagamento da Loja (vendas) —
 // tiles de forma de pagamento + fluxo Stripe (QR/link) — mas sem carrinho:
 // aqui é sempre um cliente + um curso. Ver supabase/migrations/0015 para o

@@ -1,4 +1,4 @@
-// BjjConnect — Relatórios > Visão geral: antes só olhava a tabela `vendas`
+// ERPConnect — Relatórios > Visão geral: antes só olhava a tabela `vendas`
 // dos últimos 90 dias fixos. Agora tem filtro de período (como Financeiro/
 // Estoques) e o ranking de produtos/clientes soma as três origens de receita
 // do app — vendas confirmadas, parcelas de matrícula pagas e recebimentos

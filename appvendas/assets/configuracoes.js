@@ -1,4 +1,4 @@
-// BjjConnect — Administração > Configurações: por empresa, permite trocar o
+// ERPConnect — Administração > Configurações: por empresa, permite trocar o
 // nome exibido do app (branding) e esconder itens de menu operacionais que
 // aquela empresa não usa. Só admins globais (sem empresa vinculada) acessam
 // esta tela — a rota já é bloqueada em app.js (globalAdminOnly), e a RPC

@@ -1,4 +1,4 @@
-// BjjConnect — agenda de atendimentos: a equipe marca um horário para um
+// ERPConnect — agenda de atendimentos: a equipe marca um horário para um
 // cliente (com um produto associado), com visão por dia, semana ou mês.
 // Todo agendamento novo nasce "agendado". Clicar em "Atendido" na listagem
 // do dia não muda o status na hora — abre a tela de Vendas pré-preenchida

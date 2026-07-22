@@ -6,8 +6,8 @@ export function render(container) {
     <div class="login-screen">
       <div class="login-card">
         <div class="login-card__brand">
-          <span class="sidebar__brand-mark" style="background: var(--accent);">BC</span>
-          <span class="login-card__brand-name">BjjConnect</span>
+          <span class="sidebar__brand-mark" style="background: var(--accent);">EC</span>
+          <span class="login-card__brand-name">ERPConnect</span>
         </div>
         <p class="login-card__hint">Entre com seu usuário e senha para continuar.</p>
         <form id="login-form">

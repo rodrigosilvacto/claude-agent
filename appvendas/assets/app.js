@@ -1,4 +1,4 @@
-// BjjConnect — shell: roteamento por hash + utilitários compartilhados
+// ERPConnect — shell: roteamento por hash + utilitários compartilhados
 // (toast, modal, confirmação, formatação). Cada módulo de tela expõe
 // `render(view)` e monta seu próprio HTML dentro do container recebido.
 
@@ -9,8 +9,8 @@ import { supabase } from "./supabaseClient.js";
 // `nome_aplicacao` configurado (ou quando o usuário é admin global, sem
 // empresa vinculada). A tela de login sempre mostra este nome — antes de
 // autenticar não há como saber a qual empresa a pessoa pertence.
-export const DEFAULT_APP_NAME = "BjjConnect";
-const DEFAULT_APP_MARK = "BC";
+export const DEFAULT_APP_NAME = "ERPConnect";
+const DEFAULT_APP_MARK = "EC";
 
 // Chaves em ROUTES que representam itens de menu operacionais que podem ser
 // escondidos por empresa (configurável em Administração > Configurações).

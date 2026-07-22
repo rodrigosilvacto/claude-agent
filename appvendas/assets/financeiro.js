@@ -1,4 +1,4 @@
-// BjjConnect — Financeiro > Contas a Receber: lista tudo que foi recebido no
+// ERPConnect — Financeiro > Contas a Receber: lista tudo que foi recebido no
 // período (vendas confirmadas + lançamentos manuais + parcelas pagas de
 // matrícula) e o que ainda está por vir (parcelas de matrícula pendentes,
 // com vencimento no período — títulos a receber de verdade, ver

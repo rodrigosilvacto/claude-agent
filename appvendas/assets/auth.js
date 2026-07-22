@@ -1,4 +1,4 @@
-// BjjConnect — sessão, login/logout e checagem de permissões.
+// ERPConnect — sessão, login/logout e checagem de permissões.
 //
 // Login é feito com "usuário" (não e-mail): mapeamos para um e-mail interno
 // fictício (usuario@appvendas.local) porque o Supabase Auth exige e-mail —
