@@ -76,78 +76,104 @@ function renderNovaMatricula(content) {
   const admin = isAdmin();
 
   content.innerHTML = `
-    <div class="venda-layout">
-      <div class="card card-section venda-itens">
-        ${prefill?.agendamentoId ? `
-          <div class="form-info">
-            Confirmando atendimento de ${escapeHtml(prefill.clienteNome || "cliente sem cadastro")} em ${formatDate(prefill.dataAgendamento)} às ${prefill.horario}. Revise os dados e finalize para registrar a matrícula.
+    ${prefill?.agendamentoId ? `
+      <div class="form-info">
+        Confirmando atendimento de ${escapeHtml(prefill.clienteNome || "cliente sem cadastro")} em ${formatDate(prefill.dataAgendamento)} às ${prefill.horario}. Revise os dados e finalize para registrar a matrícula.
+      </div>
+    ` : prefill?.renovacao ? `
+      <div class="form-info">
+        Renovando a matrícula #${prefill.origemNumero} de ${escapeHtml(prefill.clienteNome || "cliente")}. Cliente, curso, duração, parcelas e forma de pagamento vieram preenchidos — revise e finalize para criar a nova matrícula.
+      </div>
+    ` : ""}
+
+    <div class="matricula-layout">
+      <div class="matricula-steps">
+        <div class="card step-card">
+          <div class="step-head">
+            <span class="step-num">1</span>
+            <h3 class="step-title">Aluno</h3>
           </div>
-        ` : prefill?.renovacao ? `
-          <div class="form-info">
-            Renovando a matrícula #${prefill.origemNumero} de ${escapeHtml(prefill.clienteNome || "cliente")}. Cliente, curso, duração, parcelas e forma de pagamento vieram preenchidos — revise e finalize para criar a nova matrícula.
-          </div>
-        ` : ""}
-        ${admin ? `
-          <div class="field">
-            <label>Empresa<span class="field-required">*</span></label>
-            <div data-mount="m-empresa"></div>
-          </div>
-        ` : ""}
-        <div class="venda-meta">
-          <div class="field" style="flex: 1 1 auto; min-width: 0;">
-            <label>Cliente<span class="field-required">*</span></label>
-            <div data-mount="m-cliente"></div>
-          </div>
-          <div class="field venda-meta__data">
-            <label for="m-data">Data da matrícula</label>
-            <input class="input" type="date" id="m-data" value="${todayStr()}" />
+          <div class="step-body">
+            ${admin ? `
+              <div class="field">
+                <label>Empresa<span class="field-required">*</span></label>
+                <div data-mount="m-empresa"></div>
+              </div>
+            ` : ""}
+            <div class="venda-meta">
+              <div class="field" style="flex: 1 1 auto; min-width: 0;">
+                <label>Cliente<span class="field-required">*</span></label>
+                <div data-mount="m-cliente"></div>
+              </div>
+              <div class="field venda-meta__data">
+                <label for="m-data">Data da matrícula</label>
+                <input class="input" type="date" id="m-data" value="${todayStr()}" />
+              </div>
+            </div>
+            <div class="info-card" id="m-aluno-info" hidden></div>
           </div>
         </div>
-        <div class="info-card" id="m-aluno-info" hidden></div>
 
-        <div class="field">
-          <label>Curso / Serviço<span class="field-required">*</span></label>
-          <div data-mount="m-produto"></div>
-        </div>
-        <div class="info-card info-card--curso" id="m-curso-info" hidden></div>
-
-        <div class="form-grid" style="grid-template-columns: 1fr 1fr;">
-          <div class="field">
-            <label for="m-meses">Duração do curso (meses) <span class="field-optional">informativo</span></label>
-            <input class="input" type="number" id="m-meses" min="1" step="1" value="1" />
+        <div class="card step-card">
+          <div class="step-head">
+            <span class="step-num">2</span>
+            <h3 class="step-title">Curso</h3>
           </div>
-          <div class="field">
-            <label for="m-parcelas">Número de parcelas<span class="field-required">*</span></label>
-            <input class="input" type="number" id="m-parcelas" min="1" step="1" value="1" />
-          </div>
-        </div>
-        <p class="field-hint" style="margin-top: -0.6rem;">A duração não afeta o valor cobrado — é só um registro de quanto tempo dura o curso. Quem define o valor é o preço do curso/serviço escolhido acima, dividido entre as parcelas. A 1ª parcela é paga agora, na forma de pagamento escolhida ao lado; as demais viram títulos a receber com vencimento mensal, cobrados no balcão conforme o aluno for pagando.</p>
+          <div class="step-body">
+            <div class="field">
+              <label>Curso / Serviço<span class="field-required">*</span></label>
+              <div data-mount="m-produto"></div>
+            </div>
+            <div class="info-card info-card--curso" id="m-curso-info" hidden></div>
 
-        <button type="button" class="venda-obs-toggle" id="m-obs-toggle">+ Adicionar observação</button>
-        <div class="field venda-obs" id="m-obs-field" hidden>
-          <label for="m-obs">Observações</label>
-          <textarea class="input" id="m-obs" rows="2"></textarea>
+            <div class="form-grid" style="grid-template-columns: 1fr 1fr;">
+              <div class="field">
+                <label for="m-meses">Duração do curso (meses) <span class="field-optional">informativo</span></label>
+                <input class="input" type="number" id="m-meses" min="1" step="1" value="1" />
+              </div>
+              <div class="field">
+                <label for="m-parcelas">Número de parcelas<span class="field-required">*</span></label>
+                <input class="input" type="number" id="m-parcelas" min="1" step="1" value="1" />
+              </div>
+            </div>
+            <p class="field-hint">A duração não afeta o valor cobrado — é só um registro de quanto tempo dura o curso. Quem define o valor é o preço do curso/serviço escolhido acima, dividido entre as parcelas. A 1ª parcela é paga agora, na forma de pagamento escolhida ao lado; as demais viram títulos a receber com vencimento mensal, cobrados no balcão conforme o aluno for pagando.</p>
+
+            <button type="button" class="venda-obs-toggle" id="m-obs-toggle">+ Adicionar observação</button>
+            <div class="field venda-obs" id="m-obs-field" hidden>
+              <label for="m-obs">Observações</label>
+              <textarea class="input" id="m-obs" rows="2"></textarea>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div class="card receipt receipt--plain">
-        <p class="section-title">Resumo da matrícula</p>
+      <div class="card enroll-summary">
+        <div class="step-head">
+          <span class="step-num">3</span>
+          <h3 class="step-title">Pagamento</h3>
+        </div>
 
-        <p class="receipt__label">Forma de pagamento</p>
+        <p class="enroll-summary__label">Forma de pagamento</p>
         <div class="paytiles" id="m-forma" role="radiogroup" aria-label="Forma de pagamento">
           ${paytilesHtml()}
         </div>
 
-        <div class="receipt__tear"></div>
-        <div class="receipt__row"><span>Valor do curso/serviço</span><span id="r-mensalidade">${formatCurrency(0)}</span></div>
-        <div class="receipt__row">
-          <span>Desconto</span>
-          <input class="input" type="number" id="m-desconto" min="0" step="0.01" value="0" style="width: 110px; text-align:right; font-family: var(--font-mono);" />
+        <div class="enroll-summary__lines">
+          <div class="enroll-summary__row"><span>Valor do curso/serviço</span><span id="r-mensalidade">${formatCurrency(0)}</span></div>
+          <div class="enroll-summary__row enroll-summary__row--input">
+            <span>Desconto</span>
+            <input class="input enroll-summary__discount" type="number" id="m-desconto" min="0" step="0.01" value="0" />
+          </div>
+          <div class="enroll-summary__row"><span>Total contratado</span><span id="r-total">${formatCurrency(0)}</span></div>
         </div>
-        <div class="receipt__tear"></div>
-        <div class="receipt__total"><span>Total</span><span id="r-total">${formatCurrency(0)}</span></div>
-        <p class="cell-muted" id="r-parcelas-info" style="margin-top: 0.5rem;">1x de ${formatCurrency(0)}</p>
-        <button type="button" class="btn btn--primary" id="m-finalizar" style="width:100%; justify-content:center; margin-top: 1.25rem;">Finalizar matrícula</button>
+
+        <div class="enroll-summary__due">
+          <span class="enroll-summary__due-label">Cobrado agora — 1ª parcela</span>
+          <span class="enroll-summary__due-value" id="r-cobrar-agora">${formatCurrency(0)}</span>
+          <span class="enroll-summary__due-hint" id="r-parcelas-info"></span>
+        </div>
+
+        <button type="button" class="btn btn--primary" id="m-finalizar" style="width:100%; justify-content:center;">Finalizar matrícula</button>
         <div id="m-error"></div>
       </div>
     </div>
@@ -299,10 +325,13 @@ function renderNovaMatricula(content) {
 
     content.querySelector("#r-mensalidade").textContent = formatCurrency(valorServico);
     content.querySelector("#r-total").textContent = formatCurrency(total);
+    content.querySelector("#r-cobrar-agora").textContent = formatCurrency(valorParcela);
     // Cálculo em tela é aproximado (só pra guiar o operador) — o servidor
     // recalcula com arredondamento exato e ajusta a última parcela, ver
     // criar_matricula.
-    content.querySelector("#r-parcelas-info").textContent = `${parcelas}x de ${formatCurrency(valorParcela)} (aprox.)`;
+    content.querySelector("#r-parcelas-info").textContent = parcelas > 1
+      ? `+ ${parcelas - 1} parcela${parcelas - 1 > 1 ? "s" : ""} mensa${parcelas - 1 > 1 ? "is" : "l"} de ${formatCurrency(valorParcela)} (aprox.)`
+      : "Pagamento único — sem parcelas futuras.";
   }
 
   parcelasInput.addEventListener("input", updateTotals);

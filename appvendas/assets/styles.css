@@ -1258,17 +1258,15 @@ svg {
    atendente, na hora, o contato do aluno e as orientações do curso, sem
    precisar abrir outra tela ou lembrar de cor. */
 .info-card {
-  margin: 0.7rem 0 1.1rem;
+  margin: 0;
   padding: 0.85rem 1rem;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--line-strong);
-  background: var(--surface);
+  background: var(--paper);
   font-size: 0.85rem;
 }
 
 .info-card--curso {
   background: var(--info-soft);
-  border-color: var(--info);
 }
 
 .info-card__title {
@@ -1314,6 +1312,143 @@ svg {
 .info-card__hint--alert {
   color: var(--warning);
   font-weight: 700;
+}
+
+/* ── Matrículas: fluxo em etapas ───────────────────────────────────────
+   Diferente da Loja (carrinho + recibo): aqui é sempre 1 aluno + 1 curso,
+   então o formulário vira 3 passos lidos em sequência (aluno → curso →
+   pagamento) em vez de itens soltos numa lista. O painel de pagamento não
+   imita um comprovante de compra — destaca separadamente o que é cobrado
+   agora (1ª parcela) do valor total contratado, porque numa matrícula
+   parcelada é essa diferença que importa pro atendente, não o "recibo". */
+.matricula-layout {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
+  gap: 1.4rem;
+  align-items: start;
+}
+
+.matricula-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+}
+
+.step-card {
+  padding: 1.25rem 1.35rem 1.4rem;
+}
+
+.step-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.step-head {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding-bottom: 0.85rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.step-num {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 1.7rem;
+  height: 1.7rem;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent-deep);
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  font-weight: 800;
+}
+
+.step-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+
+.enroll-summary {
+  padding: 1.25rem 1.35rem 1.4rem;
+  position: sticky;
+  top: 1.5rem;
+}
+
+.enroll-summary .step-num {
+  background: var(--accent);
+  color: #fff;
+}
+
+.enroll-summary__label {
+  font-family: var(--font-sans);
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin: 0 0 0.6rem;
+}
+
+.enroll-summary__lines {
+  margin-top: 1.1rem;
+}
+
+.enroll-summary__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  font-size: 0.87rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.enroll-summary__row:last-child {
+  border-bottom: none;
+}
+
+.enroll-summary__row > span:first-child {
+  color: var(--text-muted);
+}
+
+.enroll-summary__discount {
+  width: 100px;
+  text-align: right;
+}
+
+.enroll-summary__due {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  background: var(--accent-soft);
+  border-radius: var(--radius-sm);
+  padding: 0.9rem 1rem;
+  margin: 1.1rem 0 1.25rem;
+}
+
+.enroll-summary__due-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--accent-deep);
+}
+
+.enroll-summary__due-value {
+  font-family: var(--font-display);
+  font-size: 1.7rem;
+  font-weight: 800;
+  color: var(--accent-deep);
+}
+
+.enroll-summary__due-hint {
+  font-size: 0.8rem;
+  color: var(--text-muted);
 }
 
 /* Cabeçalho da venda: quem é o cliente (opcional) e quando — compacto,
@@ -1887,6 +2022,8 @@ svg {
 
 @media (max-width: 900px) {
   .venda-layout { grid-template-columns: 1fr; }
+  .matricula-layout { grid-template-columns: 1fr; }
+  .enroll-summary { position: static; }
   .form-grid { grid-template-columns: 1fr; }
   .report-grid { grid-template-columns: 1fr; }
 
