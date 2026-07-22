@@ -126,7 +126,7 @@ function renderNovaMatricula(content) {
             </div>
             <div class="info-card info-card--curso" id="m-curso-info" hidden></div>
 
-            <div class="form-grid" style="grid-template-columns: 1fr 1fr;">
+            <div class="form-grid">
               <div class="field">
                 <label for="m-meses">Duração do curso (meses) <span class="field-optional">informativo</span></label>
                 <input class="input" type="number" id="m-meses" min="1" step="1" value="1" />

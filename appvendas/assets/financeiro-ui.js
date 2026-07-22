@@ -31,21 +31,21 @@ export function statCard(label, value, tagColor) {
 export function periodoToolbarHtml({ prefix, inicioLabel = "De", inicio, fim }) {
   return `
     <div class="toolbar financeiro-filtro">
-      <div class="field" style="flex: 0 0 160px;">
+      <div class="field financeiro-filtro__field--date">
         <label for="${prefix}-inicio">${escapeHtml(inicioLabel)}</label>
         <input class="input" type="date" id="${prefix}-inicio" value="${inicio}" />
       </div>
-      <div class="field" style="flex: 0 0 160px;">
+      <div class="field financeiro-filtro__field--date">
         <label for="${prefix}-fim">Até</label>
         <input class="input" type="date" id="${prefix}-fim" value="${fim}" />
       </div>
-      <div class="field" style="flex: 0 0 auto;">
+      <div class="field financeiro-filtro__field--action">
         <label>&nbsp;</label>
         <button type="button" class="btn btn--ghost" id="${prefix}-filtrar">Filtrar</button>
       </div>
-      <div class="field" style="flex: 0 0 auto; margin-left: auto;">
+      <div class="field financeiro-filtro__field--push">
         <label>&nbsp;</label>
-        <label style="display:flex; align-items:center; gap:0.45rem; white-space:nowrap; font-weight:600; cursor:pointer;">
+        <label class="financeiro-filtro__checkbox">
           <input type="checkbox" id="${prefix}-somente-pendentes" />
           Só pendentes (todos os vencimentos)
         </label>

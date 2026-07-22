@@ -41,15 +41,15 @@ export async function render(view, actionsEl) {
 
   view.innerHTML = `
     <div class="toolbar financeiro-filtro">
-      <div class="field" style="flex: 0 0 160px;">
+      <div class="field financeiro-filtro__field--date">
         <label for="es-inicio">Entrada de</label>
         <input class="input" type="date" id="es-inicio" value="${state.inicio}" />
       </div>
-      <div class="field" style="flex: 0 0 160px;">
+      <div class="field financeiro-filtro__field--date">
         <label for="es-fim">Até</label>
         <input class="input" type="date" id="es-fim" value="${state.fim}" />
       </div>
-      <div class="field" style="flex: 0 0 auto;">
+      <div class="field financeiro-filtro__field--action">
         <label>&nbsp;</label>
         <button type="button" class="btn btn--ghost" id="es-filtrar">Filtrar</button>
       </div>

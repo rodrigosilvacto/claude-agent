@@ -88,7 +88,7 @@ function renderNovaVenda(content) {
         </div>
 
         <p class="section-title" style="margin-top: 1.5rem;">Itens</p>
-        <div class="form-grid" style="grid-template-columns: 2fr 1fr auto; align-items: end;">
+        <div class="form-grid form-grid--itens">
           <div class="field">
             <label>Produto</label>
             <div data-mount="v-produto"></div>
