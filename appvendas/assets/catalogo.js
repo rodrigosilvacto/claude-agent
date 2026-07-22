@@ -21,7 +21,7 @@ function avisarErro(error) {
 export async function loadClientesAtivos() {
   const { data, error } = await supabase
     .from("clientes")
-    .select("id, nome, documento")
+    .select("id, nome, documento, telefone, email")
     .eq("ativo", true)
     .eq("status_cadastro", "aprovado")
     .order("nome", { ascending: true });

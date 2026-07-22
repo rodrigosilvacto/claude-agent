@@ -1245,6 +1245,77 @@ svg {
   margin: 0 0 0.6rem;
 }
 
+/* Matrículas reaproveita a estrutura do recibo (linhas + total) pro resumo
+   financeiro, mas sem o clima de "comprovante de compra" — é uma relação
+   com o aluno, não uma venda de balcão. */
+.receipt--plain {
+  font-family: var(--font-sans);
+  background-image: none;
+}
+
+/* ── Matrículas: cartões de contexto (aluno / curso) ──────────────────
+   Aparecem só depois que o campo correspondente é preenchido — dão ao
+   atendente, na hora, o contato do aluno e as orientações do curso, sem
+   precisar abrir outra tela ou lembrar de cor. */
+.info-card {
+  margin: 0.7rem 0 1.1rem;
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  font-size: 0.85rem;
+}
+
+.info-card--curso {
+  background: var(--info-soft);
+  border-color: var(--info);
+}
+
+.info-card__title {
+  margin: 0 0 0.5rem;
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+}
+
+.info-card--curso .info-card__title {
+  color: var(--info-deep);
+}
+
+.info-card__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.15rem 0;
+}
+
+.info-card__row > span:first-child {
+  color: var(--text-muted);
+}
+
+.info-card__text {
+  margin: 0;
+  white-space: pre-line;
+  line-height: 1.45;
+}
+
+.info-card__text--muted {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.info-card__hint {
+  margin: 0.5rem 0 0;
+  color: var(--text-muted);
+}
+
+.info-card__hint--alert {
+  color: var(--warning);
+  font-weight: 700;
+}
+
 /* Cabeçalho da venda: quem é o cliente (opcional) e quando — compacto,
    porque numa venda de balcão isso raramente muda em relação ao padrão
    (sem cliente, hoje). O grosso da tela é para os itens. */

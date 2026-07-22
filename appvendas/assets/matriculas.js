@@ -28,6 +28,10 @@ let agendamentoOrigemId = null;
 // mudar o hash da rota (não dispara "hashchange" se já estiver em #/matriculas).
 let activateTab = null;
 
+// Inclui `descricao` (não faz parte das colunas padrão de loadProdutosAtivos)
+// — é o texto que vira o cartão "Orientações para os pais" abaixo do curso.
+const PRODUTO_SERVICO_COLUMNS = "id, nome, sku, preco, estoque, tipo, descricao";
+
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -61,7 +65,7 @@ export async function render(view, actionsEl) {
   tabHistorico.addEventListener("click", () => activate("historico"));
   activateTab = activate;
 
-  [clientesOptions, produtosOptions, empresasOptions] = await Promise.all([loadClientesAtivos(), loadProdutosServicos(), loadEmpresasAtivas()]);
+  [clientesOptions, produtosOptions, empresasOptions] = await Promise.all([loadClientesAtivos(), loadProdutosServicos(PRODUTO_SERVICO_COLUMNS), loadEmpresasAtivas()]);
 
   activate("nova");
 }
@@ -99,11 +103,13 @@ function renderNovaMatricula(content) {
             <input class="input" type="date" id="m-data" value="${todayStr()}" />
           </div>
         </div>
+        <div class="info-card" id="m-aluno-info" hidden></div>
 
         <div class="field">
           <label>Curso / Serviço<span class="field-required">*</span></label>
           <div data-mount="m-produto"></div>
         </div>
+        <div class="info-card info-card--curso" id="m-curso-info" hidden></div>
 
         <div class="form-grid" style="grid-template-columns: 1fr 1fr;">
           <div class="field">
@@ -124,8 +130,8 @@ function renderNovaMatricula(content) {
         </div>
       </div>
 
-      <div class="card receipt">
-        <p class="section-title">Fechamento</p>
+      <div class="card receipt receipt--plain">
+        <p class="section-title">Resumo da matrícula</p>
 
         <p class="receipt__label">Forma de pagamento</p>
         <div class="paytiles" id="m-forma" role="radiogroup" aria-label="Forma de pagamento">
@@ -191,6 +197,7 @@ function renderNovaMatricula(content) {
     options: clienteSearchOptions(clientesOptions),
     value: prefill?.clienteId || null,
     allowClear: false,
+    onChange: () => updateAlunoInfo(),
   });
 
   const produtoSelect = createSearchSelect({
@@ -199,8 +206,81 @@ function renderNovaMatricula(content) {
     options: produtoSearchOptions(produtosOptions, { meta: produtoMetaPreco }),
     value: prefill?.produtoId || null,
     allowClear: false,
-    onChange: () => updateTotals(),
+    onChange: () => {
+      updateTotals();
+      updateCursoInfo();
+    },
   });
+
+  // Cartão "Aluno": telefone/e-mail/documento à mão (o combo de busca só
+  // guarda o id internamente) e aviso se o cliente já tem outra matrícula
+  // ativa — hoje isso era invisível pro atendente, que só descobria
+  // duplicidade no Histórico.
+  async function updateAlunoInfo() {
+    const el = content.querySelector("#m-aluno-info");
+    if (!el) return;
+    const clienteId = clienteSelect.getValue();
+    if (!clienteId) {
+      el.hidden = true;
+      el.innerHTML = "";
+      return;
+    }
+
+    const cliente = clientesOptions.find((c) => c.id === clienteId);
+    el.hidden = false;
+    el.innerHTML = `
+      <p class="info-card__title">Aluno</p>
+      <div class="info-card__row"><span>Telefone</span><span>${escapeHtml(cliente?.telefone || "—")}</span></div>
+      <div class="info-card__row"><span>E-mail</span><span>${escapeHtml(cliente?.email || "—")}</span></div>
+      <div class="info-card__row"><span>Documento</span><span>${escapeHtml(cliente?.documento || "—")}</span></div>
+      <p class="info-card__hint">Verificando matrículas ativas…</p>
+    `;
+
+    const { data, error } = await supabase
+      .from("matriculas")
+      .select("numero, produto:produtos(nome)")
+      .eq("cliente_id", clienteId)
+      .eq("status", "ativa")
+      .order("numero", { ascending: false });
+
+    // Se o cliente selecionado mudou enquanto a consulta rodava, o
+    // innerHTML de cima já foi substituído por uma chamada mais recente —
+    // este hintEl aponta pra um nó desanexado e escrever nele é inofensivo.
+    const hintEl = el.querySelector(".info-card__hint");
+    if (!hintEl) return;
+    if (error) {
+      hintEl.hidden = true;
+      return;
+    }
+    if (!data || data.length === 0) {
+      hintEl.textContent = "Sem outras matrículas ativas.";
+      return;
+    }
+    hintEl.classList.add("info-card__hint--alert");
+    hintEl.textContent = `Já matriculado(a) em: ${data.map((m) => m.produto?.nome || `curso #${m.numero}`).join(", ")}.`;
+  }
+
+  // Cartão "Orientações para os pais": mostra a `descricao` do curso — o
+  // mesmo texto cadastrado em Cadastros > Produtos, aqui em destaque pra
+  // quem está atendendo o balcão repetir sem precisar decorar.
+  function updateCursoInfo() {
+    const el = content.querySelector("#m-curso-info");
+    if (!el) return;
+    const produto = produtosOptions.find((p) => p.id === produtoSelect.getValue());
+    if (!produto) {
+      el.hidden = true;
+      el.innerHTML = "";
+      return;
+    }
+    const descricao = (produto.descricao || "").trim();
+    el.hidden = false;
+    el.innerHTML = `
+      <p class="info-card__title">Orientações para os pais</p>
+      ${descricao
+        ? `<p class="info-card__text">${escapeHtml(descricao)}</p>`
+        : `<p class="info-card__text info-card__text--muted">Nenhuma orientação cadastrada para este curso — adicione em Cadastros → Produtos.</p>`}
+    `;
+  }
 
   if (prefill?.produtoId && !produtosOptions.some((p) => p.id === prefill.produtoId)) {
     showToast("Curso/serviço do atendimento não encontrado no catálogo de Matrículas.", "error");
@@ -228,6 +308,8 @@ function renderNovaMatricula(content) {
   parcelasInput.addEventListener("input", updateTotals);
   descontoInput.addEventListener("input", updateTotals);
   updateTotals();
+  updateAlunoInfo();
+  updateCursoInfo();
 
   content.querySelector("#m-finalizar").addEventListener("click", (e) => withButtonLock(e.currentTarget, async () => {
     const errorEl = content.querySelector("#m-error");
@@ -299,7 +381,7 @@ function renderNovaMatricula(content) {
     }
 
     agendamentoOrigemId = null;
-    produtosOptions = await loadProdutosServicos();
+    produtosOptions = await loadProdutosServicos(PRODUTO_SERVICO_COLUMNS);
     renderNovaMatricula(content);
   }
 
@@ -335,7 +417,7 @@ function renderNovaMatricula(content) {
   // sem perder o que já foi preenchido no formulário nem fechar os campos
   // de busca.
   registerAutoRefresh(async () => {
-    const [nextClientes, nextProdutos] = await Promise.all([loadClientesAtivos(), loadProdutosServicos()]);
+    const [nextClientes, nextProdutos] = await Promise.all([loadClientesAtivos(), loadProdutosServicos(PRODUTO_SERVICO_COLUMNS)]);
     clientesOptions = nextClientes;
     produtosOptions = nextProdutos;
     clienteSelect.setOptions(clienteSearchOptions(clientesOptions));

@@ -77,7 +77,7 @@ export async function render(view, actionsEl) {
       { key: "custo", label: "Custo", type: "number", step: "0.01", default: 0 },
       { key: "estoque_minimo", label: "Estoque mínimo", type: "number", step: "1", default: 0 },
       { key: "fornecedor_id", label: "Fornecedor", type: "search-select", dependsOn: "empresa_id", optionsLoader: loadFornecedorOptions },
-      { key: "descricao", label: "Descrição", type: "textarea", full: true },
+      { key: "descricao", label: "Descrição / orientações (exibida em Matrículas quando for serviço)", type: "textarea", full: true },
       { key: "ativo", label: "Produto ativo", type: "checkbox", default: true, full: true },
     ],
   });
