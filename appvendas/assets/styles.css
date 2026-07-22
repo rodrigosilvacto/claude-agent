@@ -110,6 +110,7 @@ svg {
 
 .app-shell {
   min-height: 100vh;
+  display: flex;
 }
 
 .sidebar-scrim {
@@ -120,9 +121,12 @@ svg {
   z-index: 39;
 }
 
-/* Fixa ao viewport (não à página) — permanece inteiro na tela mesmo em
-   listas longas, em vez de "sticky" dentro da grid, que pode ser cortado
-   quando o conteúdo ao lado é mais alto que a janela. */
+/* Sticky (não mais fixed) dentro do layout flex do app-shell: gruda no
+   topo da viewport durante a rolagem, igual o .topbar já faz, mas sem
+   tirar o menu do fluxo do documento. Isso deixa a página com uma única
+   barra de rolagem — um menu mais alto que a tela (grupo Administração
+   etc.) rola junto com o resto em vez de precisar de scroll interno
+   próprio, que ficava visualmente estranho isolado na coluna do menu. */
 .sidebar {
   background: var(--ink);
   background-image: linear-gradient(175deg, var(--ink) 0%, #102016 100%);
@@ -130,16 +134,16 @@ svg {
   display: flex;
   flex-direction: column;
   padding: 1.35rem 0 1rem;
-  position: fixed;
+  position: sticky;
   top: 0;
-  left: 0;
   width: var(--sidebar-w);
-  height: 100vh;
+  flex-shrink: 0;
+  min-height: 100vh;
   z-index: 30;
 }
 
 .main-column {
-  margin-left: var(--sidebar-w);
+  flex: 1;
   min-height: 100vh;
 }
 
@@ -188,24 +192,7 @@ svg {
 
 .sidebar__nav {
   flex: 1;
-  overflow-y: auto;
   padding: 0 0.8rem;
-}
-
-/* Com todos os grupos (Cadastros → Administração), o menu passa da altura
-   da tela em telas mais baixas — o grupo Administração fica só alcançável
-   rolando, sem nenhuma pista de que há mais itens abaixo. Uma faixa que
-   "gruda" no fim da área visível avisa que dá pra rolar; some sozinha
-   quando o conteúdo já cabe inteiro (não sobra o que "grudar"). */
-.sidebar__nav::after {
-  content: "";
-  position: sticky;
-  display: block;
-  bottom: 0;
-  height: 28px;
-  margin-top: -28px;
-  background: linear-gradient(to bottom, rgba(19, 37, 29, 0), var(--ink) 85%);
-  pointer-events: none;
 }
 
 .nav-group {
@@ -441,10 +428,6 @@ svg {
 .app-shell.is-locked .sidebar-scrim,
 .app-shell.is-locked .topbar {
   display: none;
-}
-
-.app-shell.is-locked .main-column {
-  margin-left: 0;
 }
 
 .login-screen {
@@ -2132,11 +2115,11 @@ svg {
 }
 
 @media (max-width: 960px) {
-  .main-column {
-    margin-left: 0;
-  }
-
   .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
     z-index: 40;
     transform: translateX(-100%);
     transition: transform 0.18s ease;
